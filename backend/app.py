@@ -321,27 +321,34 @@ def download_video(url: str, output_path: Path):
 
 def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optional[Job] = None):
     """Transcribe audio file using AnythingLLM API"""
+    import base64
+    
     headers = {"Authorization": f"Bearer {ALLM_API_KEY}"}
     
-    # Step 1: Upload document to AnythingLLM
+    # Read and Base64 encode the audio file
     with open(audio_path, "rb") as f:
-        files = {"file": (audio_path.name, f, "audio/mpeg")}
-        upload_resp = requests.post(
-            f"{ALLM_BASE_URL}/document/upload",
-            headers=headers,
-            files=files
-        )
+        audio_bytes = f.read()
     
-    if upload_resp.status_code != 200:
-        raise Exception(f"Upload failed: {upload_resp.text}")
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
     
-    upload_data = upload_resp.json()
-    if not upload_data.get("documents"):
-        raise Exception("No documents returned from upload")
+    # Detect MIME type from file extension
+    ext = audio_path.suffix.lower()
+    mime_map = {
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".flac": "audio/flac",
+        ".opus": "audio/opus",
+        ".mp4": "video/mp4",
+        ".mkv": "video/x-matroska",
+        ".webm": "video/webm"
+    }
+    audio_mime = mime_map.get(ext, "audio/mpeg")
     
-    doc_name = upload_data["documents"][0]["location"]
+    # Create Data URI
+    data_uri = f"data:{audio_mime};base64,{audio_b64}"
     
-    # Step 2: Send chat with document attachment to trigger transcription
+    # Send chat with document attachment to trigger transcription
     chat_resp = requests.post(
         f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/chat",
         headers={**headers, "Content-Type": "application/json"},
@@ -349,9 +356,9 @@ def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optiona
             "message": "Please transcribe this audio file.",
             "mode": "chat",
             "attachments": [{
-                "type": "file",
-                "name": doc_name,
-                "mime": "application/anythingllm-document"
+                "name": audio_path.name,
+                "mime": "application/anythingllm-document",
+                "contentString": data_uri
             }]
         }
     )

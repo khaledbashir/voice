@@ -320,106 +320,84 @@ def download_video(url: str, output_path: Path):
 
 
 def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optional[Job] = None):
-    """Transcribe audio file using AnythingLLM API using upload + embed workflow"""
+    """Transcribe audio file using AnythingLLM API"""
+    import base64
+    
     print(f"DEBUG: Starting AnythingLLM transcription for {audio_path.name}")
     headers = {"Authorization": f"Bearer {ALLM_API_KEY}"}
     
-    # Step 1: Upload file using multipart/form-data (better for large files)
-    print(f"DEBUG: Uploading audio file ({audio_path.stat().st_size} bytes)")
-    upload_url = f"{ALLM_BASE_URL}/document/upload"
+    # Read and Base64 encode the audio file
+    print(f"DEBUG: Reading audio file ({audio_path.stat().st_size} bytes)")
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
     
-    try:
-        with open(audio_path, "rb") as f:
-            files = {"file": (audio_path.name, f, "audio/wav" if audio_path.suffix == ".wav" else "audio/mpeg")}
-            upload_resp = requests.post(
-                upload_url,
-                headers=headers,
-                files=files,
-                timeout=300
-            )
-    except requests.exceptions.RequestException as e:
-        print(f"ERROR: Upload failed: {e}")
-        raise Exception(f"File upload failed: {e}")
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    print(f"DEBUG: Base64 encoded ({len(audio_b64)} chars)")
     
-    print(f"DEBUG: Upload response status: {upload_resp.status_code}")
+    # Detect MIME type from file extension
+    ext = audio_path.suffix.lower()
+    mime_map = {
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".flac": "audio/flac",
+        ".opus": "audio/opus",
+        ".mp4": "video/mp4",
+        ".mkv": "video/x-matroska",
+        ".webm": "video/webm"
+    }
+    audio_mime = mime_map.get(ext, "audio/mpeg")
+    print(f"DEBUG: Detected MIME type: {audio_mime}")
     
-    if upload_resp.status_code != 200:
-        print(f"ERROR: Upload failed with status {upload_resp.status_code}")
-        print(f"ERROR: Response body: {upload_resp.text}")
-        raise Exception(f"Upload failed: HTTP {upload_resp.status_code} - {upload_resp.text}")
+    # Create Data URI
+    data_uri = f"data:{audio_mime};base64,{audio_b64}"
     
-    upload_data = upload_resp.json()
-    if not upload_data.get("documents"):
-        raise Exception("No documents returned from upload")
-    
-    doc_location = upload_data["documents"][0]["location"]
-    print(f"DEBUG: Document location: {doc_location}")
-    
-    # Step 2: Add document to workspace embeddings (triggers transcription)
-    print(f"DEBUG: Adding document to workspace '{ALLM_WORKSPACE}'")
-    embed_url = f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/update-embeddings"
-    
-    try:
-        embed_resp = requests.post(
-            embed_url,
-            headers={**headers, "Content-Type": "application/json"},
-            json={"adds": [doc_location]},
-            timeout=600
-        )
-    except requests.exceptions.RequestException as e:
-        print(f"ERROR: Embed update failed: {e}")
-        raise Exception(f"Workspace update failed: {e}")
-    
-    print(f"DEBUG: Embed response status: {embed_resp.status_code}")
-    
-    if embed_resp.status_code != 200:
-        print(f"ERROR: Embed update failed")
-        print(f"ERROR: Response body: {embed_resp.text}")
-        raise Exception(f"Embed update failed: HTTP {embed_resp.status_code} - {embed_resp.text}")
-    
-    # Step 3: Query workspace to get transcription
-    print(f"DEBUG: Querying workspace for transcript")
+    # Send chat with document attachment to trigger transcription
     chat_url = f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/chat"
+    print(f"DEBUG: Sending chat request to {chat_url}")
+    print(f"DEBUG: Request payload size: ~{len(data_uri)/1024/1024:.1f} MB")
     
     try:
         chat_resp = requests.post(
             chat_url,
             headers={**headers, "Content-Type": "application/json"},
             json={
-                "message": "Please transcribe this audio file. Return only the transcribed text.",
-                "mode": "query"
+                "message": "Please transcribe this audio file.",
+                "mode": "chat",
+                "attachments": [{
+                    "name": audio_path.name,
+                    "mime": "application/anythingllm-document",
+                    "contentString": data_uri
+                }]
             },
-            timeout=300
+            timeout=600  # 10 minute timeout for large files
         )
+    except requests.exceptions.Timeout as e:
+        print(f"ERROR: Request timed out after 10 minutes: {e}")
+        raise Exception(f"Transcription timed out - audio file too large or service busy")
     except requests.exceptions.RequestException as e:
-        print(f"ERROR: Chat query failed: {e}")
-        raise Exception(f"Chat query failed: {e}")
+        print(f"ERROR: Request failed: {e}")
+        raise Exception(f"API request failed: {e}")
     
-    print(f"DEBUG: Chat response status: {chat_resp.status_code}")
+    print(f"DEBUG: AnythingLLM response status: {chat_resp.status_code}")
     
     if chat_resp.status_code != 200:
-        print(f"ERROR: Chat query failed")
+        print(f"ERROR: AnythingLLM API failed with status {chat_resp.status_code}")
         print(f"ERROR: Response body: {chat_resp.text}")
-        raise Exception(f"Chat query failed: HTTP {chat_resp.status_code} - {chat_resp.text}")
+        raise Exception(f"Chat failed: HTTP {chat_resp.status_code} - {chat_resp.text}")
     
     chat_data = chat_resp.json()
-    transcript_text = chat_data.get("textResponse", "")
+    print(f"DEBUG: Received chat response: {str(chat_data)[:200]}")
     
+    transcript_text = chat_data.get("textResponse", "")
     if not transcript_text:
-        print(f"WARNING: Empty textResponse. Full response: {chat_data}")
-        # Fallback: Try to get raw content from document
-        print(f"DEBUG: Trying to fetch document content directly")
-        doc_name = doc_location.split('/')[-1]
-        doc_url = f"{ALLM_BASE_URL}/document/{doc_name}"
-        doc_resp = requests.get(doc_url, headers=headers, timeout=60)
-        if doc_resp.status_code == 200:
-            transcript_text = doc_resp.text
-        else:
-            raise Exception(f"Could not retrieve transcript: {doc_resp.text}")
+        print(f"WARNING: Empty textResponse from AnythingLLM. Full response: {chat_data}")
     
     # Write transcript to file
     transcript_path.write_text(transcript_text, encoding="utf-8")
     print(f"DEBUG: Wrote transcript to {transcript_path} ({len(transcript_text)} chars)")
+
+
 def call_llm(message: str, context: str, model: Optional[str] = None, api_url: Optional[str] = None, api_key: Optional[str] = None) -> str:
     final_url = (api_url or os.getenv("LLM_API_URL", "")).strip()
     if not final_url:

@@ -134,13 +134,17 @@ def process_job(job: Job):
 def download_video(url: str, output_path: Path):
     ydl_opts = {
         "outtmpl": str(output_path),
-        "format": "ba[ext=m4a]/bestaudio/best", # Prefer audio-only for faster processing and lower bot profile
+        "format": "ba[ext=m4a]/bestaudio/best",
         "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": False,
         "no_warnings": False,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "referer": "https://www.google.com/",
+        "nocheckcertificate": True,
+        "ignoreerrors": True,
+        "no_color": True,
+        "geo_bypass": True,
     }
     
     # Comprehensive cookie file search

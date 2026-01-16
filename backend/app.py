@@ -17,7 +17,7 @@ STATIC_DIR = Path(os.getenv("STATIC_DIR", "../frontend"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # AnythingLLM Configuration
-ALLM_BASE_URL = "https://basheer-everythingllm.x0uyzh.easypanel.host/api/v1"
+ALLM_BASE_URL = "https://basheer-everythingllm.x0uyzh.easypanel.host/v1"
 ALLM_API_KEY = "ZYE6SD0-7EDM9Z6-P833MGZ-PPTGX59"
 ALLM_WORKSPACE = "trans"
 

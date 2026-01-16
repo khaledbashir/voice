@@ -649,81 +649,32 @@
     }
 
     function pollJob(jobId) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/ws/jobs/${jobId}/transcript`;
+      // Poll for transcript updates every 1 second
+      elements.jobStatus.textContent = '🔴 Transcribing...';
       
-      try {
-        const ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-          elements.jobStatus.textContent = '🔴 Transcribing live...';
-          
-          if (poller) clearInterval(poller);
-          poller = setInterval(async () => {
-            try {
-              const res = await fetch(api(`/jobs/${jobId}`));
-              const job = await res.json();
-              if (job.status === 'done' || job.status === 'failed') {
-                clearInterval(poller);
-                ws.close();
-              }
-            } catch (e) { console.error(e); }
-          }, 2000);
-        };
-        
-        ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'segment') {
-            currentTranscript = data.transcript;
-            elements.transcriptContent.innerHTML = formatTranscriptForDisplay(currentTranscript);
-            updateStats();
-          } else if (data.type === 'complete') {
-            elements.jobStatus.textContent = '✅ Done';
-            elements.btnLabel.textContent = 'Start Transcription';
-            elements.startJob.disabled = false;
-            updateStats();
-            elements.toggleAssistant.click();
-            switchTab('transcript');
-          } else if (data.type === 'error') {
-            elements.jobStatus.textContent = '❌ Error';
-            elements.errorDisplay.textContent = data.error;
-            elements.errorDisplay.classList.remove('hidden');
-            elements.startJob.disabled = false;
-            elements.btnLabel.textContent = 'Start Transcription';
-          }
-        };
-        
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          elements.jobStatus.textContent = '⚠️ Connection error';
-        };
-        
-        ws.onclose = () => {
-          if (poller) clearInterval(poller);
-        };
-      } catch (e) {
-        console.error('WebSocket failed, falling back to polling');
-        fallbackPollJob(jobId);
-      }
-    }
-
-    function fallbackPollJob(jobId) {
       if (poller) clearInterval(poller);
       poller = setInterval(async () => {
         try {
           const res = await fetch(api(`/jobs/${jobId}`));
           const job = await res.json();
           
+          // Get current transcript
+          try {
+            const tRes = await fetch(api(`/jobs/${jobId}/transcript`));
+            const { transcript } = await tRes.json();
+            if (transcript && transcript !== currentTranscript) {
+              currentTranscript = transcript;
+              elements.transcriptContent.innerHTML = formatTranscriptForDisplay(currentTranscript);
+              updateStats();
+            }
+          } catch (e) {
+            // Transcript not ready yet
+          }
+          
           if (job.status === 'done') {
             clearInterval(poller);
             elements.jobStatus.textContent = '✅ Done';
             elements.btnLabel.textContent = 'Start Transcription';
-            const tRes = await fetch(api(`/jobs/${jobId}/transcript`));
-            const { transcript } = await tRes.json();
-            currentTranscript = transcript;
-            elements.transcriptContent.innerHTML = formatTranscriptForDisplay(currentTranscript);
-            updateStats();
             elements.startJob.disabled = false;
             elements.toggleAssistant.click();
             switchTab('transcript');
@@ -735,9 +686,14 @@
             elements.startJob.disabled = false;
             elements.btnLabel.textContent = 'Start Transcription';
           }
-        } catch (e) { console.error(e); }
-      }, 2000);
+        } catch (e) { 
+          console.error('Poll error:', e);
+        }
+      }, 1000);  // Poll every second
     }
+
+
+  // Chat
 
     // Chat
     async function sendMessage() {

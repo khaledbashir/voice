@@ -124,6 +124,23 @@ def create_job(body: CreateJob):
 def get_job(job_id: str):
     job = jobs.get(job_id)
     if not job:
+        # Check if the job folder exists (in case of restart)
+        folder = DATA_DIR / job_id
+        if folder.exists():
+            # Reconstruct job from file system
+            transcript_path = folder / "transcript.txt"
+            if transcript_path.exists():
+                status = "done"
+            else:
+                status = "transcribing"
+            return {
+                "id": job_id,
+                "url": f"uploaded",
+                "language": "auto",
+                "model_size": "large-v3",
+                "status": status,
+                "error": None,
+            }
         raise HTTPException(status_code=404, detail="job not found")
     return {
         "id": job.id,
@@ -311,31 +328,11 @@ def transcribe_video(video_path: Path, transcript_path: Path, language: str, mod
         line = f"[{segment.start:.2f}-{segment.end:.2f}] {segment.text}"
         lines.append(line)
         
-        # Send live update to WebSocket clients
+        # Write partial transcript to file for frontend to poll
         if job:
-            import asyncio
-            async def send_update():
-                transcript_so_far = "\n".join(lines)
-                for ws in list(job.websocket_clients):
-                    try:
-                        await ws.send_json({
-                            "type": "segment",
-                            "text": segment.text.strip(),
-                            "start": round(segment.start, 2),
-                            "end": round(segment.end, 2),
-                            "transcript": transcript_so_far
-                        })
-                    except Exception as e:
-                        print(f"DEBUG: WebSocket send error: {e}")
-                        job.websocket_clients.discard(ws)
-            
-            # Schedule async task to send update
-            try:
-                asyncio.create_task(send_update())
-            except RuntimeError:
-                # No event loop running - we're in a thread
-                pass
+            transcript_path.write_text("\n".join(lines), encoding="utf-8")
     
+    # Final write
     transcript_path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -382,11 +379,6 @@ def call_llm(message: str, context: str, model: Optional[str] = None, api_url: O
         raise HTTPException(status_code=500, detail=f"Bad LLM response: {data}") from exc
 
 
-# Serve static frontend if it exists
-if STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
-
-
 def process_uploaded_audio(job: Job):
     """Process audio file that was uploaded directly"""
     try:
@@ -430,6 +422,11 @@ def process_uploaded_audio(job: Job):
             asyncio.create_task(send_error())
         except RuntimeError:
             pass
+
+
+# Mount static files LAST so all API routes are handled first
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 
 if __name__ == "__main__":

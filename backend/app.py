@@ -128,6 +128,12 @@ def download_video(url: str, output_path: Path):
         "merge_output_format": "mp4",
         "noplaylist": True,
     }
+    
+    # Check for cookies.txt in the data directory to bypass bot detection
+    cookie_file = DATA_DIR / "cookies.txt"
+    if cookie_file.exists():
+        ydl_opts["cookiefile"] = str(cookie_file)
+        
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 

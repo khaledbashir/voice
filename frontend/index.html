@@ -111,6 +111,50 @@
     }
     .export-menu button:hover { background: #f5f5f5; }
     body.dark-mode .export-menu button:hover { background: #334155; }
+    
+    .drag-over {
+      background-color: #f0f0f0 !important;
+      border: 2px dashed #000 !important;
+      border-radius: 8px;
+    }
+    body.dark-mode .drag-over {
+      background-color: #1e293b !important;
+      border-color: #64748b !important;
+    }
+    
+    .menu-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .menu-item:hover { background-color: #f5f5f5; }
+    body.dark-mode .menu-item { border-bottom-color: rgba(226, 232, 240, 0.05); }
+    body.dark-mode .menu-item:hover { background-color: #334155; }
+    
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    
+    .modal-box {
+      background: white;
+      dark-mode & { background: #1e293b; }
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
   </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -126,19 +170,33 @@
         <i class="fa-solid fa-moon"></i>
       </button>
     </div>
-    <nav class="flex-1 px-2 py-4 space-y-1">
-      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded cursor-pointer text-gray-700 dark:text-gray-300 transition">
-        <i class="fa-solid fa-file-lines w-4"></i> Recent Transcripts
-      </div>
-      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded cursor-pointer text-gray-700 dark:text-gray-300 transition">
+    
+    <nav class="flex-1 px-2 py-4 space-y-2">
+      <button id="btn-new-session" class="w-full text-left px-3 py-2 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded text-gray-700 dark:text-gray-300 transition flex items-center gap-3">
+        <i class="fa-solid fa-file-circle-plus w-4"></i> New Transcript
+      </button>
+      <button id="btn-rename-session" class="w-full text-left px-3 py-2 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded text-gray-700 dark:text-gray-300 transition flex items-center gap-3">
+        <i class="fa-solid fa-pen-to-square w-4"></i> Rename
+      </button>
+      <button id="btn-duplicate-session" class="w-full text-left px-3 py-2 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded text-gray-700 dark:text-gray-300 transition flex items-center gap-3">
+        <i class="fa-solid fa-copy w-4"></i> Duplicate
+      </button>
+      <hr class="my-2 border-[#ececeb] dark:border-[#334155]">
+      <button id="btn-open-recent" class="w-full text-left px-3 py-2 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded text-gray-700 dark:text-gray-300 transition flex items-center gap-3">
+        <i class="fa-solid fa-clock w-4"></i> Recent Transcripts
+      </button>
+      <button id="btn-favorites" class="w-full text-left px-3 py-2 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded text-gray-700 dark:text-gray-300 transition flex items-center gap-3">
         <i class="fa-solid fa-star w-4"></i> Favorites
-      </div>
+      </button>
     </nav>
+    
     <div class="p-4 border-t border-[#ececeb] dark:border-[#334155]" style="border-color: var(--border-light);">
       <div class="space-y-2">
-        <p class="text-[10px] uppercase font-bold text-gray-400">Quick Actions</p>
-        <button id="btn-clear-session" class="w-full text-left px-2 py-1 text-xs hover:bg-[#efefed] dark:hover:bg-[#334155] rounded flex items-center gap-2 transition">
-          <i class="fa-solid fa-trash w-3"></i> Clear Session
+        <button id="btn-delete-session" class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex items-center gap-2 transition">
+          <i class="fa-solid fa-trash w-3"></i> Delete Session
+        </button>
+        <button id="btn-clear-session" class="w-full text-left px-3 py-2 text-xs hover:bg-[#efefed] dark:hover:bg-[#334155] rounded flex items-center gap-2 transition">
+          <i class="fa-solid fa-broom w-3"></i> Clear Cache
         </button>
       </div>
     </div>
@@ -192,8 +250,15 @@
             </div>
           </div>
           
-          <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus,.mp4,.mov,.mkv,.webm,.avi,.flv,.wmv" class="w-full mb-4 px-4 py-3 border rounded text-sm cursor-pointer dark:bg-[#1e293b] dark:border-[#334155]" style="border-color: var(--border-light);" />
-          <p class="text-xs text-gray-500 mb-4">MP3, M4A, WAV, AAC, FLAC, OPUS, MP4, MOV, MKV, WEBM, AVI, FLV, WMV</p>
+          <!-- Drag and Drop Zone -->
+          <div id="upload-zone" class="w-full mb-4 p-6 border-2 border-dashed rounded-lg text-center transition cursor-pointer hover:border-black dark:hover:border-white" style="border-color: var(--border-light); background-color: rgba(0,0,0,0.01);">
+            <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus,.mp4,.mov,.mkv,.webm,.avi,.flv,.wmv" class="hidden" />
+            <div class="pointer-events-none">
+              <i class="fa-solid fa-cloud-arrow-up text-2xl text-gray-400 mb-3"></i>
+              <p class="font-medium text-gray-700 dark:text-gray-300 mb-1">Drag files here or click to upload</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">MP3, M4A, WAV, AAC, FLAC, OPUS, MP4, MOV, MKV, WEBM, AVI, FLV, WMV</p>
+            </div>
+          </div>
           
           <div class="flex items-center gap-3">
             <button id="start-job" class="px-6 py-2 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-700 transition flex items-center gap-2">
@@ -249,11 +314,18 @@
 
       <div class="p-4 bg-white dark:bg-[#0f172a] border-t border-[#ececeb] dark:border-[#334155]" style="border-color: var(--border-light);">
         <div class="relative">
-          <textarea id="chat-input" rows="3" class="w-full p-3 pr-10 border border-[#ececeb] dark:border-[#334155] dark:bg-[#1e293b] dark:text-white rounded-lg text-sm focus:ring-1 focus:ring-black outline-none resize-none transition" placeholder="Ask me anything about the transcript..." style="border-color: var(--border-light);"></textarea>
-          <button id="btn-chat-send" class="absolute right-3 bottom-3 text-gray-400 hover:text-black dark:hover:text-white transition">
-            <i class="fa-solid fa-paper-plane"></i>
-          </button>
+          <textarea id="chat-input" rows="3" class="w-full p-3 pr-10 border border-[#ececeb] dark:border-[#334155] dark:bg-[#1e293b] dark:text-white rounded-lg text-sm focus:ring-1 focus:ring-black outline-none resize-none transition" placeholder="Ask me anything about the transcript... (or paste images/documents)" style="border-color: var(--border-light);"></textarea>
+          <div class="absolute right-3 bottom-3 flex gap-2">
+            <button id="btn-attach-file" class="text-gray-400 hover:text-black dark:hover:text-white transition" title="Attach file to message">
+              <i class="fa-solid fa-paperclip"></i>
+            </button>
+            <button id="btn-chat-send" class="text-gray-400 hover:text-black dark:hover:text-white transition">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+          <input type="file" id="chat-file-input" class="hidden" accept="image/*,.pdf,.doc,.docx,.txt" />
         </div>
+        <div id="chat-file-preview" class="mt-2 text-xs text-gray-500 hidden"></div>
       </div>
     </div>
 
@@ -670,21 +742,56 @@
     // Chat
     async function sendMessage() {
       const msg = elements.chatInput.value.trim();
-      if (!msg || !currentJob) return;
+      if (!msg && !attachedFile) return;
+      if (!currentJob) return alert('Please transcribe something first');
       
       const p = providers[elements.selectProvider.value];
       const model = elements.selectModel.value;
 
-      addChatBubble('user', msg);
+      // Show message with file indicator
+      if (msg) addChatBubble('user', attachedFile ? `${msg}\n📎 [${attachedFile.name}]` : msg);
       elements.chatInput.value = '';
       
       try {
+        let messageText = msg;
+        
+        // If file is attached, read and add file info to message
+        if (attachedFile) {
+          const fileReader = new FileReader();
+          fileReader.onload = async () => {
+            // For images, we could send as base64, but for now just mention the file
+            messageText += `\n\n[File: ${attachedFile.name}, Type: ${attachedFile.type}]`;
+            
+            const res = await fetch(api('/chat'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                job_id: currentJob, 
+                message: messageText,
+                api_url: p.url,
+                api_key: p.key,
+                model: model
+              })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const { reply } = await res.json();
+            addChatBubble('assistant', reply);
+            
+            // Clear attachment
+            attachedFile = null;
+            chatFileInput.value = '';
+            chatFilePreview.classList.add('hidden');
+          };
+          fileReader.readAsText(attachedFile);
+          return;
+        }
+        
         const res = await fetch(api('/chat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             job_id: currentJob, 
-            message: msg,
+            message: messageText,
             api_url: p.url,
             api_key: p.key,
             model: model
@@ -829,6 +936,97 @@
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
+      }
+    };
+
+    // Drag and Drop
+    const uploadZone = document.getElementById('upload-zone');
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      uploadZone.addEventListener(eventName, preventDefaults, false);
+    });
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadZone.addEventListener(eventName, () => uploadZone.classList.add('drag-over'), false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      uploadZone.addEventListener(eventName, () => uploadZone.classList.remove('drag-over'), false);
+    });
+    uploadZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) {
+        elements.audioFile.files = files;
+        uploadZone.querySelector('p').textContent = `✅ ${files[0].name} selected`;
+      }
+    }, false);
+    uploadZone.onclick = () => elements.audioFile.click();
+    elements.audioFile.onchange = () => {
+      if (elements.audioFile.files.length > 0) {
+        uploadZone.querySelector('p').textContent = `✅ ${elements.audioFile.files[0].name} selected`;
+      }
+    };
+
+    // Chat File Upload
+    const chatFileInput = document.getElementById('chat-file-input');
+    const chatFilePreview = document.getElementById('chat-file-preview');
+    let attachedFile = null;
+
+    document.getElementById('btn-attach-file').onclick = () => chatFileInput.click();
+    chatFileInput.onchange = () => {
+      if (chatFileInput.files.length > 0) {
+        attachedFile = chatFileInput.files[0];
+        chatFilePreview.textContent = `📎 ${attachedFile.name} attached`;
+        chatFilePreview.classList.remove('hidden');
+      }
+    };
+
+    // Session Management - Rename
+    document.getElementById('btn-rename-session').onclick = () => {
+      const newName = prompt('Enter new session name:');
+      if (newName) {
+        localStorage.setItem('sessionName', newName);
+        alert(`Session renamed to: ${newName}`);
+      }
+    };
+
+    // Session Management - Duplicate
+    document.getElementById('btn-duplicate-session').onclick = () => {
+      if (!currentTranscript) return alert('No transcript to duplicate');
+      const newName = prompt('New session name:', (localStorage.getItem('sessionName') || 'Transcript') + ' (Copy)');
+      if (newName) {
+        localStorage.setItem('duplicatedTranscript', currentTranscript);
+        localStorage.setItem('sessionName', newName);
+        alert('Session duplicated. Refreshing...');
+        location.reload();
+      }
+    };
+
+    // Session Management - Delete
+    document.getElementById('btn-delete-session').onclick = () => {
+      if (confirm('Delete current session? This cannot be undone.')) {
+        localStorage.removeItem('sessionName');
+        localStorage.removeItem('duplicatedTranscript');
+        alert('Session deleted');
+        location.reload();
+      }
+    };
+
+    // Session Management - New Session
+    document.getElementById('btn-new-session').onclick = () => {
+      if (confirm('Start a new session? Current session will be cleared.')) {
+        localStorage.removeItem('sessionName');
+        localStorage.removeItem('duplicatedTranscript');
+        currentJob = null;
+        currentTranscript = null;
+        elements.transcriptContent.innerHTML = '<div class="text-gray-400">Upload and transcribe audio to see the transcript here...</div>';
+        elements.chatMessages.innerHTML = '<div class="flex gap-3"><div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div><div class="text-sm leading-relaxed text-gray-700 dark:text-gray-300">Ready for a new transcription. Upload an audio or video file above.</div></div>';
+        elements.audioFile.value = '';
+        elements.jobStatus.textContent = '';
+        attachedFile = null;
+        chatFilePreview.classList.add('hidden');
       }
     };
 

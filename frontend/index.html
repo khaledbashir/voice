@@ -3,207 +3,352 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arabic Book Maker</title>
+  <title>VoiceToBook | Notion Style</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    :root {
-      --bg: #0f172a;
-      --card: #111827;
-      --accent: #10b981;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      font-family: "Inter", system-ui, -apple-system, sans-serif;
-    }
-    body { margin: 0; background: var(--bg); color: var(--text); display: grid; place-items: center; }
-    .layout { width: min(1100px, 94vw); padding: 32px 0 60px; display: grid; gap: 16px; }
-    .hero { display: grid; gap: 8px; }
-    .hero h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
-    .card { background: var(--card); border: 1px solid #1f2937; border-radius: 16px; padding: 18px; }
-    form { display: grid; gap: 12px; }
-    input, button, textarea { border-radius: 10px; border: 1px solid #1f2937; background: #0b1220; color: var(--text); font-size: 16px; }
-    input, textarea { padding: 12px; }
-    button { cursor: pointer; padding: 12px 16px; border: none; background: var(--accent); color: #03170f; font-weight: 700; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .status { color: var(--muted); font-size: 14px; }
-    .chat { min-height: 320px; max-height: 420px; overflow: auto; display: grid; gap: 10px; background: #0b1220; border-radius: 12px; padding: 14px; border: 1px solid #1f2937; }
-    .bubble { padding: 10px 12px; border-radius: 12px; line-height: 1.5; }
-    .user { background: #172554; }
-    .assistant { background: #0f172a; border: 1px solid #1f2937; }
-    .transcript { white-space: pre-wrap; max-height: 200px; overflow: auto; border: 1px solid #1f2937; padding: 10px; border-radius: 10px; background: #0b1220; color: var(--muted); }
-    .error-msg { color: #f87171; font-size: 14px; margin-top: 8px; border: 1px solid #ef4444; padding: 10px; border-radius: 8px; display: none; white-space: pre-wrap; font-family: monospace; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #37352f; }
+    .editor-container { color: #37352f; }
+    [contenteditable]:focus { outline: none; }
+    .notion-block { padding: 3px 2px; margin: 1px 0; min-height: 1.5em; }
+    .notion-block:hover { background-color: rgba(55, 53, 47, 0.08); border-radius: 3px; }
+    .sidebar-transition { transition: transform 0.3s ease-in-out; }
+    .drawer-open { transform: translateX(0); }
+    .drawer-closed { transform: translateX(100%); }
+    .arabic-text { font-family: 'Amiri', serif; direction: rtl; text-align: right; }
   </style>
 </head>
-<body>
-  <div class="layout">
-    <div class="hero">
-      <h1>Arabic Episode → Book</h1>
-      <p class="status">Paste a YouTube link, wait for transcription, then chat to craft the book.</p>
+<body class="flex h-screen overflow-hidden">
+
+  <!-- Left Sidebar (Navigation) -->
+  <aside class="w-64 bg-[#fbfbfa] border-r border-[#ececeb] flex flex-col hidden md:flex">
+    <div class="px-4 py-3 font-semibold text-sm text-[#37352f] flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-5 h-5 bg-black rounded flex items-center justify-center text-white text-[10px]">VB</div>
+        <span>VoiceToBook</span>
+      </div>
+      <i class="fa-solid fa-angles-left text-gray-400 hover:text-gray-600 cursor-pointer"></i>
+    </div>
+    <nav class="flex-1 px-2 py-4 space-y-1">
+      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] rounded cursor-pointer text-gray-700">
+        <i class="fa-solid fa-house w-4"></i> Home
+      </div>
+      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] rounded cursor-pointer text-gray-700">
+        <i class="fa-solid fa-book w-4"></i> Current Book
+      </div>
+    </nav>
+    <div class="p-4 border-t border-[#ececeb]">
+       <form id="cookie-form" class="space-y-2">
+         <p class="text-[10px] uppercase font-bold text-gray-400">Cookie Bypass</p>
+         <input type="file" id="cookie-file" class="hidden" accept=".txt">
+         <button type="button" onclick="document.getElementById('cookie-file').click()" class="w-full text-left px-2 py-1 text-xs hover:bg-[#efefed] rounded flex items-center gap-2">
+           <i class="fa-solid fa-cookie-bite"></i> Update cookies.txt
+         </button>
+         <button id="upload-btn" class="hidden"></button>
+         <div id="cookie-status" class="text-[10px]"></div>
+       </form>
+    </div>
+  </aside>
+
+  <!-- Main Editor Pane -->
+  <main class="flex-1 flex flex-col relative overflow-hidden bg-white">
+    <!-- Header -->
+    <header class="h-12 flex items-center justify-between px-4 border-b border-[#ececeb]">
+      <div class="flex items-center gap-2 text-sm text-gray-500">
+        <span>Drafts</span> / <span class="text-black font-medium">My Arabic Book</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <div id="save-status" class="text-xs text-gray-400">Saved</div>
+        <button id="toggle-assistant" class="px-3 py-1 bg-black text-white rounded text-sm hover:bg-zinc-800 transition">
+          <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Assistant
+        </button>
+      </div>
+    </header>
+
+    <!-- Editor -->
+    <div class="flex-1 overflow-y-auto px-4 md:px-24 py-12">
+      <div class="max-w-3xl mx-auto">
+        <!-- Job Input Area -->
+        <div class="mb-12">
+          <input type="text" id="job-url" placeholder="Paste YouTube link here..." class="w-full text-4xl font-bold border-none outline-none placeholder-gray-200 mb-4" />
+          <div class="flex items-center gap-3">
+             <button id="start-job" class="px-4 py-1.5 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 transition">Create Transcript</button>
+             <span id="job-status" class="text-sm text-gray-400 italic"></span>
+          </div>
+          <div id="error-display" class="mt-4 p-3 bg-red-50 text-red-600 rounded text-xs hidden whitespace-pre-wrap"></div>
+        </div>
+
+        <!-- Notion-like Editor Area -->
+        <div id="editor" contenteditable="true" class="prose prose-zinc lg:prose-xl focus:outline-none min-h-[500px]" data-placeholder="Start writing your book here...">
+          <h1>Title of your book...</h1>
+          <p>The transcription will appear in the Assistant pane. Click 'Insert' to move text here.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Side Assistant Drawer -->
+  <aside id="assistant-pane" class="w-[400px] border-l border-[#ececeb] bg-[#fbfbfa] fixed right-0 top-0 h-full shadow-2xl sidebar-transition drawer-closed flex flex-col z-50">
+    <div class="h-12 border-b border-[#ececeb] flex items-center justify-between px-4 bg-white">
+       <div class="flex gap-4">
+         <button id="tab-chat" class="text-sm font-semibold border-b-2 border-black pb-3 pt-3">Assistant</button>
+         <button id="tab-transcript" class="text-sm font-medium text-gray-500 pb-3 pt-3">Transcript</button>
+       </div>
+       <button id="close-assistant" class="p-1 hover:bg-gray-100 rounded">
+         <i class="fa-solid fa-xmark text-gray-400"></i>
+       </button>
     </div>
 
-    <div class="card">
-      <form id="cookie-form" style="display: flex; align-items: center; gap: 10px;">
-        <p style="margin: 0; font-size: 14px; color: var(--muted);">YouTube blocked? Upload cookies.txt:</p>
-        <input type="file" id="cookie-file" accept=".txt" style="display: none;" />
-        <button type="button" onclick="document.getElementById('cookie-file').click()" style="padding: 6px 12px; font-size: 14px; background: #374151; color: white;">Pick File</button>
-        <button type="submit" id="upload-btn" style="padding: 6px 12px; font-size: 14px;">Upload</button>
-        <span id="cookie-status" style="font-size: 12px; color: var(--accent);"></span>
-      </form>
+    <!-- Assistant/Chat View -->
+    <div id="view-chat" class="flex-1 flex flex-col overflow-hidden">
+      <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-6">
+        <div class="flex gap-3">
+          <div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div>
+          <div class="text-sm leading-relaxed text-[#37352f]">
+            I'm your Arabic book writing assistant. Once the transcript is ready, I can help you outline chapters, summarize sections, or refine the language.
+          </div>
+        </div>
+      </div>
+      <div class="p-4 bg-white border-t border-[#ececeb]">
+        <div class="relative">
+          <textarea id="chat-input" rows="3" class="w-full p-3 pr-10 border border-[#ececeb] rounded-lg text-sm focus:ring-1 focus:ring-black outline-none resize-none" placeholder="Ask assistant..."></textarea>
+          <button id="btn-chat-send" class="absolute right-3 bottom-3 text-gray-400 hover:text-black">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
     </div>
 
-    <div class="card">
-      <form id="job-form">
-        <label> YouTube URL
-          <input id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required />
-        </label>
-        <button id="submit" type="submit">Start</button>
-        <div class="status" id="job-status"></div>
-        <div id="error-display" class="error-msg"></div>
-      </form>
+    <!-- Transcript View -->
+    <div id="view-transcript" class="flex-1 hidden flex flex-col overflow-hidden bg-white">
+      <div id="transcript-content" class="flex-1 overflow-y-auto p-6 arabic-text text-lg leading-loose text-gray-700 whitespace-pre-wrap">
+        Waiting for transcript...
+      </div>
+      <div class="p-4 border-t border-[#ececeb]">
+        <button id="btn-insert-transcript" class="w-full py-2 bg-[#fbfbfa] border border-[#ececeb] rounded text-sm font-medium hover:bg-[#efefed] transition">Insert Full Transcript to Editor</button>
+      </div>
     </div>
+  </aside>
 
-    <div class="card">
-      <div class="status" id="transcript-status">Transcript will appear here after processing.</div>
-      <div class="transcript" id="transcript"></div>
-    </div>
+  <script>
+    const api = (path) => `${window.location.origin}/api${path}`;
+    let currentJob = null;
+    let poller = null;
 
-    <div class="card">
-      <div class="chat" id="chat"></div>
-      <form id="chat-form" style="display:grid; gap:8px; margin-top:8px;">
-        <textarea id="chat-input" rows="3" placeholder="Ask for a chapter outline or rewrite a section..." required></textarea>
-        <button id="chat-send" type="submit">Send</button>
-      </form>
-    </div>
-  </div>
+    // Elements
+    const elements = {
+      editor: document.getElementById('editor'),
+      jobUrl: document.getElementById('job-url'),
+      startJob: document.getElementById('start-job'),
+      jobStatus: document.getElementById('job-status'),
+      errorDisplay: document.getElementById('error-display'),
+      chatMessages: document.getElementById('chat-messages'),
+      chatInput: document.getElementById('chat-input'),
+      chatSend: document.getElementById('btn-chat-send'),
+      transcriptContent: document.getElementById('transcript-content'),
+      assistantPane: document.getElementById('assistant-pane'),
+      toggleAssistant: document.getElementById('toggle-assistant'),
+      closeAssistant: document.getElementById('close-assistant'),
+      tabChat: document.getElementById('tab-chat'),
+      tabTranscript: document.getElementById('tab-transcript'),
+      viewChat: document.getElementById('view-chat'),
+      viewTranscript: document.getElementById('view-transcript'),
+      cookieFile: document.getElementById('cookie-file'),
+      cookieStatus: document.getElementById('cookie-status'),
+    };
 
-<script>
-const api = (path) => `${window.location.origin}/api${path}`;
-let currentJob = null;
-let poller = null;
-const statusEl = document.getElementById('job-status');
-const errorEl = document.getElementById('error-display');
-const transcriptEl = document.getElementById('transcript');
-const transcriptStatusEl = document.getElementById('transcript-status');
-const chatEl = document.getElementById('chat');
+    // UI State Logic
+    elements.toggleAssistant.onclick = () => {
+      elements.assistantPane.classList.remove('drawer-closed');
+      elements.assistantPane.classList.add('drawer-open');
+    };
+    elements.closeAssistant.onclick = () => {
+      elements.assistantPane.classList.remove('drawer-open');
+      elements.assistantPane.classList.add('drawer-closed');
+    };
 
-function addBubble(sender, text) {
-  const div = document.createElement('div');
-  div.className = `bubble ${sender}`;
-  div.textContent = text;
-  chatEl.appendChild(div);
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
+    elements.tabChat.onclick = () => {
+      elements.tabChat.classList.add('border-b-2', 'border-black', 'font-semibold');
+      elements.tabChat.classList.remove('text-gray-500', 'font-medium');
+      elements.tabTranscript.classList.remove('border-b-2', 'border-black', 'font-semibold');
+      elements.tabTranscript.classList.add('text-gray-500', 'font-medium');
+      elements.viewChat.classList.remove('hidden');
+      elements.viewTranscript.classList.add('hidden');
+    };
 
-async function createJob(url) {
-  errorEl.style.display = 'none';
-  const res = await fetch(api('/jobs'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
+    elements.tabTranscript.onclick = () => {
+      elements.tabTranscript.classList.add('border-b-2', 'border-black', 'font-semibold');
+      elements.tabTranscript.classList.remove('text-gray-500', 'font-medium');
+      elements.tabChat.classList.remove('border-b-2', 'border-black', 'font-semibold');
+      elements.tabChat.classList.add('text-gray-500', 'font-medium');
+      elements.viewTranscript.classList.remove('hidden');
+      elements.viewChat.classList.add('hidden');
+    };
 
-async function fetchJob(jobId) {
-  const res = await fetch(api(`/jobs/${jobId}`));
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function fetchTranscript(jobId) {
-  const res = await fetch(api(`/jobs/${jobId}/transcript`));
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function sendChat(jobId, message) {
-  const res = await fetch(api('/chat'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ job_id: jobId, message }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-function startPolling(jobId) {
-  poller = setInterval(async () => {
-    try {
-      const job = await fetchJob(jobId);
-      statusEl.textContent = `Status: ${job.status}`;
-      if (job.status === 'done') {
-        clearInterval(poller);
-        const t = await fetchTranscript(jobId);
-        transcriptStatusEl.textContent = 'Transcript ready';
-        transcriptEl.textContent = t.transcript;
-      }
-      if (job.status === 'failed') {
-        clearInterval(poller);
-        transcriptStatusEl.textContent = 'Failed';
-        errorEl.textContent = `Error: ${job.error || 'Unknown error'}`;
-        errorEl.style.display = 'block';
-      }
-    } catch (e) {
-      console.error(e);
+    // Helper functions
+    function appendToEditor(html) {
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      range.deleteContents();
+      range.insertNode(div);
     }
-  }, 4000);
-}
 
-document.getElementById('cookie-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fileInput = document.getElementById('cookie-file');
-  if (!fileInput.files[0]) return;
-  const formData = new FormData();
-  formData.append('file', fileInput.files[0]);
-  const status = document.getElementById('cookie-status');
-  status.textContent = 'Uploading...';
-  try {
-    const res = await fetch(api('/upload_cookies'), {
-      method: 'POST',
-      body: formData,
-    });
-    if (!res.ok) throw new Error(await res.text());
-    status.textContent = 'Success!';
-    setTimeout(() => { status.textContent = ''; }, 3000);
-  } catch (err) {
-    status.textContent = 'Error: ' + err.message;
-    status.style.color = '#f87171';
-  }
-});
+    function addChatBubble(role, text) {
+      const isAI = role === 'assistant';
+      const div = document.createElement('div');
+      div.className = 'flex gap-3 ' + (isAI ? '' : 'flex-row-reverse');
+      
+      const icon = isAI 
+        ? '<div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div>'
+        : '<div class="w-6 h-6 bg-zinc-200 rounded flex items-center justify-center text-zinc-600 text-[10px] mt-1 shrink-0">ME</div>';
+      
+      const insertBtn = isAI 
+        ? `<button onclick="insertAtCursor(\`${text.replace(/`/g, '\\`').replace(/\n/g, '<br>')}\`)" class="mt-2 text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"><i class="fa-solid fa-plus"></i> Insert into Book</button>`
+        : '';
 
-document.getElementById('job-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const url = document.getElementById('url').value.trim();
-  statusEl.textContent = 'Submitting...';
-  transcriptEl.textContent = '';
-  transcriptStatusEl.textContent = 'Working on it...';
-  try {
-    const { job_id } = await createJob(url);
-    currentJob = job_id;
-    statusEl.textContent = `Job ${job_id} created`;
-    if (poller) clearInterval(poller);
-    startPolling(job_id);
-  } catch (err) {
-    statusEl.textContent = 'Error: ' + err.message;
-  }
-});
+      div.innerHTML = `
+        ${icon}
+        <div class="flex flex-col ${isAI ? '' : 'items-end'}">
+          <div class="text-sm leading-relaxed p-2 rounded-lg ${isAI ? 'bg-zinc-50 border border-zinc-100' : 'bg-blue-600 text-white'} ${text.match(/[\u0600-\u06FF]/) ? 'arabic-text' : ''}">
+            ${text.replace(/\n/g, '<br>')}
+          </div>
+          ${insertBtn}
+        </div>
+      `;
+      elements.chatMessages.appendChild(div);
+      elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+    }
 
-document.getElementById('chat-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!currentJob) {
-    alert('Start a job first');
-    return;
-  }
-  const msg = document.getElementById('chat-input').value.trim();
-  if (!msg) return;
-  addBubble('user', msg);
-  document.getElementById('chat-input').value = '';
-  try {
-    const { reply } = await sendChat(currentJob, msg);
-    addBubble('assistant', reply);
-  } catch (err) {
-    addBubble('assistant', 'Error: ' + err.message);
-  }
-});
-</script>
+    function insertAtCursor(text) {
+      const selection = window.getSelection();
+      let range;
+      if (selection.rangeCount > 0) {
+        range = selection.getRangeAt(0);
+      } else {
+        range = document.createRange();
+        range.selectNodeContents(elements.editor);
+        range.collapse(false);
+      }
+      
+      const fragment = range.createContextualFragment(`<div class="notion-block">${text}</div>`);
+      range.insertNode(fragment);
+      elements.editor.focus();
+    }
+    window.insertAtCursor = insertAtCursor; // Make available to global scope
+
+    // API interactions
+    async function startJob() {
+      const url = elements.jobUrl.value.trim();
+      if (!url) return;
+      
+      elements.errorDisplay.classList.add('hidden');
+      elements.startJob.disabled = true;
+      elements.jobStatus.textContent = 'Starting process...';
+      
+      try {
+        const res = await fetch(api('/jobs'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const { job_id } = await res.json();
+        currentJob = job_id;
+        pollJob(job_id);
+      } catch (err) {
+        elements.jobStatus.textContent = 'Failed';
+        elements.errorDisplay.textContent = err.message;
+        elements.errorDisplay.classList.remove('hidden');
+        elements.startJob.disabled = false;
+      }
+    }
+
+    function pollJob(jobId) {
+      if (poller) clearInterval(poller);
+      poller = setInterval(async () => {
+        try {
+          const res = await fetch(api(`/jobs/${jobId}`));
+          const job = await res.json();
+          elements.jobStatus.textContent = `Status: ${job.status}...`;
+          
+          if (job.status === 'done') {
+            clearInterval(poller);
+            elements.jobStatus.textContent = 'Transcribed ✓';
+            const tRes = await fetch(api(`/jobs/${jobId}/transcript`));
+            const { transcript } = await tRes.json();
+            elements.transcriptContent.textContent = transcript;
+            elements.startJob.disabled = false;
+            // Open assistant to show transcript
+            elements.toggleAssistant.click();
+            elements.tabTranscript.click();
+          }
+          if (job.status === 'failed') {
+            clearInterval(poller);
+            elements.jobStatus.textContent = 'Failed';
+            elements.errorDisplay.textContent = job.error || 'Transcription failed. Check input/logs.';
+            elements.errorDisplay.classList.remove('hidden');
+            elements.startJob.disabled = false;
+          }
+        } catch (e) { console.error(e); }
+      }, 5000);
+    }
+
+    async function sendMessage() {
+      const msg = elements.chatInput.value.trim();
+      if (!msg || !currentJob) return;
+      
+      addChatBubble('user', msg);
+      elements.chatInput.value = '';
+      
+      try {
+        const res = await fetch(api('/chat'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: currentJob, message: msg })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const { reply } = await res.json();
+        addChatBubble('assistant', reply);
+      } catch (err) {
+        addChatBubble('assistant', 'Error: ' + err.message);
+      }
+    }
+
+    // Cookie Upload
+    elements.cookieFile.onchange = async () => {
+      const file = elements.cookieFile.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      elements.cookieStatus.textContent = 'Uploading...';
+      try {
+        const res = await fetch(api('/upload_cookies'), { method: 'POST', body: formData });
+        if (!res.ok) throw new Error('Upload failed');
+        elements.cookieStatus.textContent = 'Success ✓';
+        elements.cookieStatus.className = 'text-[10px] text-green-600';
+      } catch (err) {
+        elements.cookieStatus.textContent = 'Failed';
+        elements.cookieStatus.className = 'text-[10px] text-red-600';
+      }
+    };
+
+    // Event Listeners
+    elements.startJob.onclick = startJob;
+    elements.chatSend.onclick = sendMessage;
+    elements.chatInput.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    };
+    document.getElementById('btn-insert-transcript').onclick = () => {
+      insertAtCursor(elements.transcriptContent.textContent);
+    };
+
+  </script>
 </body>
 </html>

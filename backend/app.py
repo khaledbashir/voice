@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 import requests
 import yt_dlp
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -32,6 +32,15 @@ async def upload_cookies(file: UploadFile = File(...)):
         content = await file.read()
         cookie_path.write_bytes(content)
         return {"message": "cookies.txt uploaded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/upload_potoken")
+async def upload_potoken(token: str = Form(...)):
+    token_path = DATA_DIR / "potoken.txt"
+    try:
+        token_path.write_text(token.strip(), encoding="utf-8")
+        return {"message": "PO Token saved successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -168,6 +177,31 @@ def download_video(url: str, output_path: Path):
         "geo_bypass": True,
     }
     
+    # Search for PO Token
+    possible_po_token_paths = [
+        DATA_DIR / "po_token.txt",
+        Path("/data/po_token.txt")
+    ]
+    
+    po_token = None
+    for p in possible_po_token_paths:
+        if p.exists():
+            po_token = p.read_text().strip()
+            print(f"DEBUG: Using PO Token from {p}")
+            break
+    
+    if po_token:
+        ydl_opts["extractor_args"] = {
+            "youtube": {
+                "po_token": po_token,
+                "player_client": ["web"]
+            }
+        }
+        print(f"DEBUG: PO Token configured: {po_token[:20]}...")
+    else:
+        print("DEBUG: No PO Token found, using default client")
+        ydl_opts["extractor_args"] = {"youtube": {"player_client": ["web"]}}
+    
     # Comprehensive cookie file search
     possible_cookie_paths = [
         DATA_DIR / "cookies.txt",
@@ -188,7 +222,20 @@ def download_video(url: str, output_path: Path):
         ydl_opts["cookiefile"] = found_cookies
     else:
         print("DEBUG: No cookies.txt found in any search path.")
-        
+    
+    # PO Token support - YouTube now requires this
+    potoken_path = DATA_DIR / "potoken.txt"
+    if potoken_path.exists():
+        potoken = potoken_path.read_text(encoding="utf-8").strip()
+        if potoken:
+            print(f"DEBUG: Using PO Token: {potoken[:20]}...")
+            ydl_opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["web"],
+                    "po_token": potoken
+                }
+            }
+    
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 

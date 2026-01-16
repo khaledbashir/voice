@@ -155,9 +155,8 @@ def process_job(job: Job):
 
 def download_video(url: str, output_path: Path):
     ydl_opts = {
-        "outtmpl": str(output_path),
-        "format": "ba[ext=m4a]/bestaudio/best",
-        "merge_output_format": "mp4",
+        "outtmpl": str(output_path.with_suffix("")),
+        "format": "bestaudio/best",
         "noplaylist": True,
         "quiet": False,
         "no_warnings": False,

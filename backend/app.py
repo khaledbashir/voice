@@ -3,11 +3,11 @@ import shutil
 import uuid
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 import requests
 import yt_dlp
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -105,6 +105,7 @@ class Job:
         self.video_path: Optional[Path] = None
         self.audio_path: Optional[Path] = audio_path
         self.transcript_path: Optional[Path] = transcript_path
+        self.websocket_clients: Set[WebSocket] = set()  # Track connected WebSocket clients
 
 
 jobs: Dict[str, Job] = {}
@@ -140,6 +141,27 @@ def get_transcript(job_id: str):
     if not job or not job.transcript_path or not job.transcript_path.exists():
         raise HTTPException(status_code=404, detail="transcript not ready")
     return {"transcript": job.transcript_path.read_text(encoding="utf-8")}
+
+
+@app.websocket("/ws/jobs/{job_id}/transcript")
+async def websocket_transcript(websocket: WebSocket, job_id: str):
+    """WebSocket endpoint for live transcript streaming"""
+    job = jobs.get(job_id)
+    if not job:
+        await websocket.close(code=4004, reason="job not found")
+        return
+    
+    await websocket.accept()
+    job.websocket_clients.add(websocket)
+    
+    try:
+        # Keep connection open and handle incoming messages if any
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        job.websocket_clients.discard(websocket)
+    except Exception:
+        job.websocket_clients.discard(websocket)
 
 
 @app.post("/api/chat")
@@ -276,16 +298,44 @@ def download_video(url: str, output_path: Path):
         ydl.download([url])
 
 
-def transcribe_video(video_path: Path, transcript_path: Path, language: str, model_size: str):
+def transcribe_video(video_path: Path, transcript_path: Path, language: str, model_size: str, job: Optional[Job] = None):
     compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
     device = os.getenv("WHISPER_DEVICE", "cpu")
     model = WhisperModel(model_size, device=device, compute_type=compute_type)
     # If language is 'auto', pass None to let faster-whisper auto-detect
     lang_param = None if language == "auto" else language
     segments, _ = model.transcribe(str(video_path), language=lang_param)
+    
     lines = []
     for segment in segments:
-        lines.append(f"[{segment.start:.2f}-{segment.end:.2f}] {segment.text}")
+        line = f"[{segment.start:.2f}-{segment.end:.2f}] {segment.text}"
+        lines.append(line)
+        
+        # Send live update to WebSocket clients
+        if job:
+            import asyncio
+            async def send_update():
+                transcript_so_far = "\n".join(lines)
+                for ws in list(job.websocket_clients):
+                    try:
+                        await ws.send_json({
+                            "type": "segment",
+                            "text": segment.text.strip(),
+                            "start": round(segment.start, 2),
+                            "end": round(segment.end, 2),
+                            "transcript": transcript_so_far
+                        })
+                    except Exception as e:
+                        print(f"DEBUG: WebSocket send error: {e}")
+                        job.websocket_clients.discard(ws)
+            
+            # Schedule async task to send update
+            try:
+                asyncio.create_task(send_update())
+            except RuntimeError:
+                # No event loop running - we're in a thread
+                pass
+    
     transcript_path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -346,12 +396,40 @@ def process_uploaded_audio(job: Job):
             raise Exception(f"Audio file not found: {job.audio_path}")
         
         print(f"DEBUG: Transcribing uploaded audio: {job.audio_path}")
-        transcribe_video(job.audio_path, job.transcript_path, job.language, job.model_size)
+        transcribe_video(job.audio_path, job.transcript_path, job.language, job.model_size, job=job)
         job.status = "done"
-    except Exception as exc:  # noqa: BLE001
+        
+        # Send final completion message to all connected clients
+        import asyncio
+        async def send_complete():
+            for ws in list(job.websocket_clients):
+                try:
+                    await ws.send_json({"type": "complete", "status": "done"})
+                except Exception:
+                    job.websocket_clients.discard(ws)
+        
+        try:
+            asyncio.create_task(send_complete())
+        except RuntimeError:
+            pass
+    except Exception as exc:
         job.status = "failed"
         job.error = str(exc)
         print(f"DEBUG: Job failed with error: {str(exc)}")
+        
+        # Send error message to all connected clients
+        import asyncio
+        async def send_error():
+            for ws in list(job.websocket_clients):
+                try:
+                    await ws.send_json({"type": "error", "error": str(exc)})
+                except Exception:
+                    job.websocket_clients.discard(ws)
+        
+        try:
+            asyncio.create_task(send_error())
+        except RuntimeError:
+            pass
 
 
 if __name__ == "__main__":

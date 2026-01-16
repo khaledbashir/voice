@@ -364,6 +364,69 @@
     }
 
     function pollJob(jobId) {
+      // Connect to WebSocket for live transcript updates
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}${apiBase}/ws/jobs/${jobId}/transcript`;
+      
+      try {
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected for live transcription');
+          elements.jobStatus.textContent = 'Transcribing (live)...';
+          // Also start polling job status for completion
+          if (poller) clearInterval(poller);
+          poller = setInterval(async () => {
+            try {
+              const res = await fetch(api(`/jobs/${jobId}`));
+              const job = await res.json();
+              if (job.status === 'done' || job.status === 'failed') {
+                clearInterval(poller);
+                ws.close();
+              }
+            } catch (e) { console.error(e); }
+          }, 2000);
+        };
+        
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'segment') {
+            // Add new segment to transcript
+            elements.transcriptContent.textContent = data.transcript;
+            elements.jobStatus.textContent = 'Transcribing (live)...';
+          } else if (data.type === 'complete') {
+            elements.jobStatus.textContent = 'Transcribed ✓';
+            elements.startJob.disabled = false;
+            // Open assistant to show transcript
+            elements.toggleAssistant.click();
+            elements.tabTranscript.click();
+          } else if (data.type === 'error') {
+            elements.jobStatus.textContent = 'Failed';
+            elements.errorDisplay.textContent = data.error;
+            elements.errorDisplay.classList.remove('hidden');
+            elements.startJob.disabled = false;
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          elements.jobStatus.textContent = 'Connection error';
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket closed');
+          if (poller) clearInterval(poller);
+        };
+      } catch (e) {
+        console.error('WebSocket connection failed:', e);
+        // Fallback to polling
+        fallbackPollJob(jobId);
+      }
+    }
+    
+    function fallbackPollJob(jobId) {
+      // Fallback to HTTP polling if WebSocket fails
       if (poller) clearInterval(poller);
       poller = setInterval(async () => {
         try {
@@ -378,14 +441,13 @@
             const { transcript } = await tRes.json();
             elements.transcriptContent.textContent = transcript;
             elements.startJob.disabled = false;
-            // Open assistant to show transcript
             elements.toggleAssistant.click();
             elements.tabTranscript.click();
           }
           if (job.status === 'failed') {
             clearInterval(poller);
             elements.jobStatus.textContent = 'Failed';
-            elements.errorDisplay.textContent = job.error || 'Transcription failed. Check input/logs.';
+            elements.errorDisplay.textContent = job.error || 'Transcription failed';
             elements.errorDisplay.classList.remove('hidden');
             elements.startJob.disabled = false;
           }

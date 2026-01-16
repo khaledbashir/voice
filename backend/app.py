@@ -48,6 +48,8 @@ class ChatRequest(BaseModel):
     job_id: str
     message: str
     model: Optional[str] = None
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
 
 
 class Job:
@@ -104,7 +106,13 @@ def chat(body: ChatRequest):
         raise HTTPException(status_code=404, detail="transcript not ready")
     transcript = job.transcript_path.read_text(encoding="utf-8")
     context = transcript[-8000:]
-    reply = call_llm(body.message, context=context, model=body.model)
+    reply = call_llm(
+        body.message, 
+        context=context, 
+        model=body.model,
+        api_url=body.api_url,
+        api_key=body.api_key
+    )
     return {"reply": reply}
 
 
@@ -197,11 +205,18 @@ def transcribe_video(video_path: Path, transcript_path: Path, language: str, mod
     transcript_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def call_llm(message: str, context: str, model: Optional[str] = None) -> str:
-    api_url = os.getenv("LLM_API_URL", "").strip()
-    if not api_url:
-        raise HTTPException(status_code=503, detail="LLM not configured. Set LLM_API_URL to your Ollama host (e.g. https://your-ollama-host/v1/chat/completions) and LLM_MODEL to a small model available there.")
-    api_key = os.getenv("LLM_API_KEY")
+def call_llm(message: str, context: str, model: Optional[str] = None, api_url: Optional[str] = None, api_key: Optional[str] = None) -> str:
+    final_url = (api_url or os.getenv("LLM_API_URL", "")).strip()
+    if not final_url:
+        raise HTTPException(status_code=503, detail="LLM not configured. Select a provider in the UI.")
+    
+    # Handle the specific completions endpoint if it's just a base URL
+    if not final_url.endswith("/chat/completions") and not final_url.endswith("/chat/completions#"):
+        final_url = final_url.rstrip("/") + "/chat/completions"
+    elif final_url.endswith("#"):
+        final_url = final_url[:-1]
+
+    final_key = api_key or os.getenv("LLM_API_KEY")
     model_name = model or os.getenv("LLM_MODEL", "")
 
     payload = {
@@ -220,10 +235,10 @@ def call_llm(message: str, context: str, model: Optional[str] = None) -> str:
         payload["model"] = model_name
 
     headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    if final_key:
+        headers["Authorization"] = f"Bearer {final_key}"
 
-    response = requests.post(api_url, json=payload, headers=headers, timeout=120)
+    response = requests.post(final_url, json=payload, headers=headers, timeout=120)
     if response.status_code != 200:
         raise HTTPException(status_code=500, detail=f"LLM error: {response.text}")
     data = response.json()

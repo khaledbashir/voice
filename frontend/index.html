@@ -102,6 +102,19 @@
 
     <!-- Assistant/Chat View -->
     <div id="view-chat" class="flex-1 flex flex-col overflow-hidden">
+      <!-- LLM Selector -->
+      <div class="px-4 py-3 border-b border-[#ececeb] flex flex-col gap-2 bg-zinc-50">
+        <label class="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1">
+          <i class="fa-solid fa-microchip"></i> LLM Provider
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <select id="select-provider" class="text-xs bg-white border border-zinc-200 rounded p-1.5 outline-none hover:border-black cursor-pointer shadow-sm">
+          </select>
+          <select id="select-model" class="text-xs bg-white border border-zinc-200 rounded p-1.5 outline-none hover:border-black cursor-pointer shadow-sm">
+          </select>
+        </div>
+      </div>
+
       <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-6">
         <div class="flex gap-3">
           <div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div>
@@ -136,6 +149,40 @@
     let currentJob = null;
     let poller = null;
 
+    const providers = {
+      mimo: {
+        name: "Xiaomi Mimo",
+        url: "https://api.xiaomimimo.com/v1/",
+        key: "sk-sblrtshpbdslswa96nnh9jbj17rj8nho78zr61o3zlerul9h",
+        models: ["mimo-v2-flash"]
+      },
+      nvidia: {
+        name: "Nvidia API",
+        url: "https://integrate.api.nvidia.com/v1/",
+        key: "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",
+        models: [
+          "deepseek-ai/deepseek-r1",
+          "deepseek-ai/deepseek-v3",
+          "meta/llama-3.1-405b-instruct",
+          "meta/llama-3.1-70b-instruct",
+          "nvidia/llama-3.1-nemotron-70b-instruct",
+          "mistralai/mixtral-8x22b-instruct-v0.1"
+        ]
+      },
+      zai: {
+        name: "Z.ai (Coding PAAS)",
+        url: "https://api.z.ai/api/coding/paas/v4/chat/completions#",
+        key: "06ed76f259a24ecfb3c3193519be3547.HvNDltxpOeHLnywJ",
+        models: ["glm-4.5", "glm-4.6", "glm-4.7"]
+      },
+      ollama: {
+        name: "Ollama (Custom)",
+        url: "https://basheer-ollama.x0uyzh.easypanel.host/v1/chat/completions",
+        key: "",
+        models: ["qwen2.5:7b-instruct"]
+      }
+    };
+
     // Elements
     const elements = {
       editor: document.getElementById('editor'),
@@ -156,7 +203,32 @@
       viewTranscript: document.getElementById('view-transcript'),
       cookieFile: document.getElementById('cookie-file'),
       cookieStatus: document.getElementById('cookie-status'),
+      selectProvider: document.getElementById('select-provider'),
+      selectModel: document.getElementById('select-model')
     };
+
+    // Populate Providers
+    function initProviders() {
+      for (const id in providers) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = providers[id].name;
+        elements.selectProvider.appendChild(opt);
+      }
+      elements.selectProvider.onchange = () => {
+        const id = elements.selectProvider.value;
+        const p = providers[id];
+        elements.selectModel.innerHTML = '';
+        p.models.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          elements.selectModel.appendChild(opt);
+        });
+      };
+      elements.selectProvider.dispatchEvent(new Event('change'));
+    }
+    initProviders();
 
     // UI State Logic
     elements.toggleAssistant.onclick = () => {
@@ -187,16 +259,6 @@
     };
 
     // Helper functions
-    function appendToEditor(html) {
-      const selection = window.getSelection();
-      if (!selection.rangeCount) return;
-      const range = selection.getRangeAt(0);
-      const div = document.createElement('div');
-      div.innerHTML = html;
-      range.deleteContents();
-      range.insertNode(div);
-    }
-
     function addChatBubble(role, text) {
       const isAI = role === 'assistant';
       const div = document.createElement('div');
@@ -301,6 +363,9 @@
       const msg = elements.chatInput.value.trim();
       if (!msg || !currentJob) return;
       
+      const p = providers[elements.selectProvider.value];
+      const model = elements.selectModel.value;
+
       addChatBubble('user', msg);
       elements.chatInput.value = '';
       
@@ -308,7 +373,13 @@
         const res = await fetch(api('/chat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: currentJob, message: msg })
+          body: JSON.stringify({ 
+            job_id: currentJob, 
+            message: msg,
+            api_url: p.url,
+            api_key: p.key,
+            model: model
+          })
         });
         if (!res.ok) throw new Error(await res.text());
         const { reply } = await res.json();

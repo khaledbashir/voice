@@ -52,11 +52,10 @@ async def upload_audio(file: UploadFile = File(...), language: str = "ar"):
         # Create job
         transcript_path = folder / "transcript.txt"
         job = Job(
-            id=job_id,
+            job_id=job_id,
             url=f"uploaded:{file.filename}",
             language=language,
             model_size="large-v3",
-            status="transcribing",
             audio_path=audio_path,
             transcript_path=transcript_path
         )

@@ -11,11 +11,15 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from faster_whisper import WhisperModel
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", "../frontend"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# AnythingLLM Configuration
+ALLM_BASE_URL = "https://basheer-everythingllm.x0uyzh.easypanel.host/api/v1"
+ALLM_API_KEY = "ZYE6SD0-7EDM9Z6-P833MGZ-PPTGX59"
+ALLM_WORKSPACE = "trans"
 
 app = FastAPI(title="YouTube Arabic Transcriber", version="0.1.1")
 app.add_middleware(
@@ -225,7 +229,7 @@ def process_job(job: Job):
 
         job.status = "transcribing"
         transcript_path = folder / "transcript.txt"
-        transcribe_video(video_path, transcript_path, language=job.language, model_size=job.model_size)
+        anythingllm_transcribe(video_path, transcript_path, job=job)
         job.transcript_path = transcript_path
 
         job.status = "done"
@@ -315,25 +319,51 @@ def download_video(url: str, output_path: Path):
         ydl.download([url])
 
 
-def transcribe_video(video_path: Path, transcript_path: Path, language: str, model_size: str, job: Optional[Job] = None):
-    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-    device = os.getenv("WHISPER_DEVICE", "cpu")
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    # If language is 'auto', pass None to let faster-whisper auto-detect
-    lang_param = None if language == "auto" else language
-    segments, _ = model.transcribe(str(video_path), language=lang_param)
+def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optional[Job] = None):
+    """Transcribe audio file using AnythingLLM API"""
+    headers = {"Authorization": f"Bearer {ALLM_API_KEY}"}
     
-    lines = []
-    for segment in segments:
-        line = f"[{segment.start:.2f}-{segment.end:.2f}] {segment.text}"
-        lines.append(line)
-        
-        # Write partial transcript to file for frontend to poll
-        if job:
-            transcript_path.write_text("\n".join(lines), encoding="utf-8")
+    # Step 1: Upload document to AnythingLLM
+    with open(audio_path, "rb") as f:
+        files = {"file": (audio_path.name, f, "audio/mpeg")}
+        upload_resp = requests.post(
+            f"{ALLM_BASE_URL}/document/upload",
+            headers=headers,
+            files=files
+        )
     
-    # Final write
-    transcript_path.write_text("\n".join(lines), encoding="utf-8")
+    if upload_resp.status_code != 200:
+        raise Exception(f"Upload failed: {upload_resp.text}")
+    
+    upload_data = upload_resp.json()
+    if not upload_data.get("documents"):
+        raise Exception("No documents returned from upload")
+    
+    doc_name = upload_data["documents"][0]["location"]
+    
+    # Step 2: Send chat with document attachment to trigger transcription
+    chat_resp = requests.post(
+        f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/chat",
+        headers={**headers, "Content-Type": "application/json"},
+        json={
+            "message": "Please transcribe this audio file.",
+            "mode": "chat",
+            "attachments": [{
+                "type": "file",
+                "name": doc_name,
+                "mime": "application/anythingllm-document"
+            }]
+        }
+    )
+    
+    if chat_resp.status_code != 200:
+        raise Exception(f"Chat failed: {chat_resp.text}")
+    
+    chat_data = chat_resp.json()
+    transcript_text = chat_data.get("textResponse", "")
+    
+    # Write transcript to file
+    transcript_path.write_text(transcript_text, encoding="utf-8")
 
 
 def call_llm(message: str, context: str, model: Optional[str] = None, api_url: Optional[str] = None, api_key: Optional[str] = None) -> str:
@@ -387,8 +417,8 @@ def process_uploaded_audio(job: Job):
         if not job.audio_path or not job.audio_path.exists():
             raise Exception(f"Audio file not found: {job.audio_path}")
         
-        print(f"DEBUG: Transcribing uploaded audio: {job.audio_path}")
-        transcribe_video(job.audio_path, job.transcript_path, job.language, job.model_size, job=job)
+        print(f"DEBUG: Transcribing uploaded audio via AnythingLLM: {job.audio_path}")
+        anythingllm_transcribe(job.audio_path, job.transcript_path, job=job)
         job.status = "done"
         
         # Send final completion message to all connected clients

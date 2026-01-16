@@ -134,15 +134,35 @@ def process_job(job: Job):
 def download_video(url: str, output_path: Path):
     ydl_opts = {
         "outtmpl": str(output_path),
-        "format": "bv*+ba/best",
+        "format": "ba[ext=m4a]/bestaudio/best", # Prefer audio-only for faster processing and lower bot profile
         "merge_output_format": "mp4",
         "noplaylist": True,
+        "quiet": False,
+        "no_warnings": False,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "referer": "https://www.google.com/",
     }
     
-    # Check for cookies.txt in the data directory to bypass bot detection
-    cookie_file = DATA_DIR / "cookies.txt"
-    if cookie_file.exists():
-        ydl_opts["cookiefile"] = str(cookie_file)
+    # Comprehensive cookie file search
+    possible_cookie_paths = [
+        DATA_DIR / "cookies.txt",
+        Path("cookies.txt"),
+        Path("../cookies.txt"),
+        Path("/app/backend/data/cookies.txt"),
+        Path("/data/cookies.txt")
+    ]
+    
+    found_cookies = None
+    for p in possible_cookie_paths:
+        if p.exists():
+            found_cookies = str(p)
+            print(f"DEBUG: Using cookies from {found_cookies}")
+            break
+            
+    if found_cookies:
+        ydl_opts["cookiefile"] = found_cookies
+    else:
+        print("DEBUG: No cookies.txt found in any search path.")
         
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])

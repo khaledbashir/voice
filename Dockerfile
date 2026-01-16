@@ -17,7 +17,8 @@ COPY frontend/ /app/frontend/
 COPY backend/requirements.txt /app/requirements.txt
 
 # Install python deps
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt && \
+    pip install --no-cache-dir --upgrade yt-dlp
 
 # Expose port and run
 EXPOSE 8000

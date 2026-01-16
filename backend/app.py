@@ -191,16 +191,17 @@ def download_video(url: str, output_path: Path):
             break
     
     if po_token:
+        # Format: "client+po_token" - must be a single string in a list!
+        po_token_formatted = f"web+{po_token}"
         ydl_opts["extractor_args"] = {
             "youtube": {
-                "po_token": po_token,
-                "player_client": ["web"]
+                "po_token": [po_token_formatted]
             }
         }
-        print(f"DEBUG: PO Token configured: {po_token[:20]}...")
+        print(f"DEBUG: PO Token configured: {po_token_formatted[:25]}...")
     else:
-        print("DEBUG: No PO Token found, using default client")
-        ydl_opts["extractor_args"] = {"youtube": {"player_client": ["web"]}}
+        print("DEBUG: No PO Token found, using mweb client")
+        ydl_opts["extractor_args"] = {"youtube": {"player_client": ["mweb"]}}
     
     # Comprehensive cookie file search
     possible_cookie_paths = [

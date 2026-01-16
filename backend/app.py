@@ -191,17 +191,18 @@ def download_video(url: str, output_path: Path):
             break
     
     if po_token:
-        # Format: "client+po_token" - must be a single string in a list!
-        po_token_formatted = f"web+{po_token}"
+        # Use android_music client - no nsig, works with PO token
+        po_token_formatted = f"android_music+{po_token}"
         ydl_opts["extractor_args"] = {
             "youtube": {
-                "po_token": [po_token_formatted]
+                "po_token": [po_token_formatted],
+                "player_client": ["android_music"]
             }
         }
-        print(f"DEBUG: PO Token configured: {po_token_formatted[:25]}...")
+        print(f"DEBUG: PO Token configured: {po_token_formatted[:35]}...")
     else:
-        print("DEBUG: No PO Token found, using mweb client")
-        ydl_opts["extractor_args"] = {"youtube": {"player_client": ["mweb"]}}
+        print("DEBUG: No PO Token found, using android client")
+        ydl_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
     
     # Comprehensive cookie file search
     possible_cookie_paths = [

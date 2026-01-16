@@ -159,9 +159,13 @@ def get_job(job_id: str):
 @app.get("/api/jobs/{job_id}/transcript")
 def get_transcript(job_id: str):
     job = jobs.get(job_id)
-    if not job or not job.transcript_path or not job.transcript_path.exists():
-        raise HTTPException(status_code=404, detail="transcript not ready")
-    return {"transcript": job.transcript_path.read_text(encoding="utf-8")}
+    if job and job.transcript_path and job.transcript_path.exists():
+        return {"transcript": job.transcript_path.read_text(encoding="utf-8")}
+    # Fallback: check filesystem directly (in case of restart or lost job object)
+    transcript_path = DATA_DIR / job_id / "transcript.txt"
+    if transcript_path.exists():
+        return {"transcript": transcript_path.read_text(encoding="utf-8")}
+    raise HTTPException(status_code=404, detail="transcript not ready")
 
 
 @app.websocket("/ws/jobs/{job_id}/transcript")

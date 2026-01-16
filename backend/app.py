@@ -357,7 +357,7 @@ def call_llm(message: str, context: str, model: Optional[str] = None, api_url: O
         "messages": [
             {
                 "role": "system",
-                "content": "You are a book-writing assistant. Use the provided transcript context to write concise, well-structured Arabic prose."
+                "content": "You are an expert AI assistant specializing in transcript analysis and content refinement. Help the user understand, edit, summarize, and extract insights from transcribed content. Be clear, concise, and professional."
             },
             {"role": "system", "content": f"Transcript context (may be partial):\n{context}"},
             {"role": "user", "content": message},

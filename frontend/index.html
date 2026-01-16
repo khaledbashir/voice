@@ -3,163 +3,254 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VoiceToBook | Notion Style</title>
+  <title>TranscriptPro - Audio to Text at Speed</title>
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #37352f; }
-    .editor-container { color: #37352f; }
+    
+    :root {
+      --bg-light: #ffffff;
+      --bg-dark: #0f172a;
+      --text-light: #37352f;
+      --text-dark: #e2e8f0;
+      --border-light: #ececeb;
+      --border-dark: #1e293b;
+      --accent: #000000;
+    }
+    
+    body { 
+      font-family: 'Inter', sans-serif; 
+      background-color: var(--bg-light); 
+      color: var(--text-light);
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    body.dark-mode {
+      background-color: var(--bg-dark);
+      color: var(--text-dark);
+    }
+    
+    .editor-container { color: inherit; }
     [contenteditable]:focus { outline: none; }
     .notion-block { padding: 3px 2px; margin: 1px 0; min-height: 1.5em; }
     .notion-block:hover { background-color: rgba(55, 53, 47, 0.08); border-radius: 3px; }
+    body.dark-mode .notion-block:hover { background-color: rgba(226, 232, 240, 0.08); }
+    
     .sidebar-transition { transition: transform 0.3s ease-in-out; }
     .drawer-open { transform: translateX(0); }
     .drawer-closed { transform: translateX(100%); }
-    .arabic-text { font-family: 'Amiri', serif; direction: rtl; text-align: right; }
+    
+    .timestamp { 
+      display: inline-block;
+      font-size: 0.75rem;
+      color: #999;
+      padding: 0 4px;
+      margin-right: 4px;
+      border-radius: 3px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+      cursor: pointer;
+    }
+    .timestamp:hover { opacity: 1; background-color: rgba(0,0,0,0.1); }
+    body.dark-mode .timestamp:hover { background-color: rgba(226, 232, 240, 0.1); }
+    
+    .transcript-segment {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      line-height: 1.6;
+    }
+    body.dark-mode .transcript-segment { border-bottom-color: rgba(226, 232, 240, 0.05); }
+    
+    .copy-btn {
+      opacity: 0;
+      transition: opacity 0.2s;
+      font-size: 0.75rem;
+      cursor: pointer;
+      color: #666;
+    }
+    .transcript-segment:hover .copy-btn { opacity: 1; }
+    
+    .stat-box {
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.02);
+      border-radius: 4px;
+      font-size: 0.75rem;
+      color: #666;
+    }
+    body.dark-mode .stat-box { background: rgba(226, 232, 240, 0.05); color: #aaa; }
+    
+    .search-highlight {
+      background-color: #fef08a;
+      padding: 2px 4px;
+      border-radius: 2px;
+    }
+    
+    .export-menu {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      z-index: 100;
+    }
+    body.dark-mode .export-menu { background: #1e293b; border-color: #334155; }
+    .export-menu.show { display: block; }
+    .export-menu button {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      text-align: left;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .export-menu button:hover { background: #f5f5f5; }
+    body.dark-mode .export-menu button:hover { background: #334155; }
   </style>
 </head>
 <body class="flex h-screen overflow-hidden">
 
-  <!-- Left Sidebar (Navigation) -->
-  <aside class="w-64 bg-[#fbfbfa] border-r border-[#ececeb] flex flex-col hidden md:flex">
-    <div class="px-4 py-3 font-semibold text-sm text-[#37352f] flex items-center justify-between">
+  <!-- Left Sidebar -->
+  <aside class="w-64 bg-[#fbfbfa] border-r border-[#ececeb] flex flex-col hidden md:flex dark:bg-[#1e293b] dark:border-[#334155]" style="background-color: var(--bg-light); border-color: var(--border-light);">
+    <div class="px-4 py-3 font-semibold text-sm flex items-center justify-between" style="color: var(--text-light);">
       <div class="flex items-center gap-2">
-        <div class="w-5 h-5 bg-black rounded flex items-center justify-center text-white text-[10px]">VB</div>
-        <span>VoiceToBook</span>
+        <div class="w-5 h-5 bg-black rounded flex items-center justify-center text-white text-[10px]">TP</div>
+        <span>TranscriptPro</span>
       </div>
-      <i class="fa-solid fa-angles-left text-gray-400 hover:text-gray-600 cursor-pointer"></i>
+      <button id="theme-toggle" class="p-1 text-gray-400 hover:text-black dark:hover:text-white transition">
+        <i class="fa-solid fa-moon"></i>
+      </button>
     </div>
     <nav class="flex-1 px-2 py-4 space-y-1">
-      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] rounded cursor-pointer text-gray-700">
-        <i class="fa-solid fa-house w-4"></i> Home
+      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded cursor-pointer text-gray-700 dark:text-gray-300 transition">
+        <i class="fa-solid fa-file-lines w-4"></i> Recent Transcripts
       </div>
-      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] rounded cursor-pointer text-gray-700">
-        <i class="fa-solid fa-book w-4"></i> Current Book
+      <div class="flex items-center gap-3 px-2 py-1.5 text-sm hover:bg-[#efefed] dark:hover:bg-[#334155] rounded cursor-pointer text-gray-700 dark:text-gray-300 transition">
+        <i class="fa-solid fa-star w-4"></i> Favorites
       </div>
     </nav>
-    <div class="p-4 border-t border-[#ececeb]">
-       <form id="cookie-form" class="space-y-2">
-         <p class="text-[10px] uppercase font-bold text-gray-400">Cookie Bypass</p>
-         <input type="file" id="cookie-file" class="hidden" accept=".txt">
-         <button type="button" onclick="document.getElementById('cookie-file').click()" class="w-full text-left px-2 py-1 text-xs hover:bg-[#efefed] rounded flex items-center gap-2">
-           <i class="fa-solid fa-cookie-bite"></i> Update cookies.txt
-         </button>
-         <button id="upload-btn" class="hidden"></button>
-         <div id="cookie-status" class="text-[10px]"></div>
-       </form>
-       <hr class="my-3 border-[#ececeb]">
-       <form id="potoken-form" class="space-y-2">
-         <p class="text-[10px] uppercase font-bold text-gray-400">PO Token (Required)</p>
-         <input type="text" id="potoken-input" placeholder="Paste PO Token here..." class="w-full px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:border-black">
-         <button type="submit" class="w-full text-left px-2 py-1 text-xs bg-black text-white rounded hover:bg-zinc-800 transition">Save PO Token</button>
-         <div id="potoken-status" class="text-[10px]"></div>
-       </form>
+    <div class="p-4 border-t border-[#ececeb] dark:border-[#334155]" style="border-color: var(--border-light);">
+      <div class="space-y-2">
+        <p class="text-[10px] uppercase font-bold text-gray-400">Quick Actions</p>
+        <button id="btn-clear-session" class="w-full text-left px-2 py-1 text-xs hover:bg-[#efefed] dark:hover:bg-[#334155] rounded flex items-center gap-2 transition">
+          <i class="fa-solid fa-trash w-3"></i> Clear Session
+        </button>
+      </div>
     </div>
   </aside>
 
-  <!-- Main Editor Pane -->
-  <main class="flex-1 flex flex-col relative overflow-hidden bg-white">
+  <!-- Main Pane -->
+  <main class="flex-1 flex flex-col relative overflow-hidden" style="background-color: var(--bg-light);">
     <!-- Header -->
-    <header class="h-12 flex items-center justify-between px-4 border-b border-[#ececeb]">
+    <header class="h-12 flex items-center justify-between px-4 border-b" style="border-color: var(--border-light);">
       <div class="flex items-center gap-2 text-sm text-gray-500">
-        <span>Drafts</span> / <span class="text-black font-medium">My Arabic Book</span>
+        <span>Transcription Studio</span>
       </div>
-      <div class="flex items-center gap-4">
-        <div id="save-status" class="text-xs text-gray-400">Saved</div>
-        <button id="toggle-assistant" class="px-3 py-1 bg-black text-white rounded text-sm hover:bg-zinc-800 transition">
-          <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Assistant
+      <div class="flex items-center gap-3">
+        <div id="header-stats" class="text-xs text-gray-400"></div>
+        <button id="toggle-assistant" class="px-3 py-1 bg-black text-white rounded text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 transition">
+          <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Tools
         </button>
       </div>
     </header>
 
-    <!-- Editor -->
+    <!-- Main Editor Area -->
     <div class="flex-1 overflow-y-auto px-4 md:px-24 py-12">
       <div class="max-w-3xl mx-auto">
-    <!-- Job Input Area -->
+        <!-- Upload Section -->
         <div class="mb-12">
-          <h2 class="text-2xl font-bold mb-4">Upload Media File</h2>
-          <div class="mb-4 grid grid-cols-2 gap-4">
+          <h1 class="text-3xl font-bold mb-2">Transcribe Audio & Video</h1>
+          <p class="text-gray-500 mb-6">Upload any audio or video file. Get instant, searchable transcripts with AI-powered editing.</p>
+          
+          <div class="mb-6 grid grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium mb-2">Language</label>
-              <select id="language-select" class="w-full px-4 py-2 border border-gray-200 rounded text-sm bg-white cursor-pointer">
+              <select id="language-select" class="w-full px-4 py-2 border rounded text-sm bg-white dark:bg-[#1e293b] dark:border-[#334155] cursor-pointer" style="border-color: var(--border-light); color: var(--text-light);">
                 <option value="auto">🤖 Auto-Detect</option>
-                <option value="ar">Arabic</option>
                 <option value="en">English</option>
-                <option value="es">Spanish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="it">Italian</option>
-                <option value="pt">Portuguese</option>
-                <option value="ru">Russian</option>
-                <option value="zh">Chinese</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
-                <option value="hi">Hindi</option>
-                <option value="tr">Turkish</option>
-                <option value="pl">Polish</option>
-                <option value="vi">Vietnamese</option>
-                <option value="th">Thai</option>
+                <option value="ar">العربية</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="it">Italiano</option>
+                <option value="pt">Português</option>
+                <option value="ru">Русский</option>
+                <option value="zh">中文</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="hi">हिन्दी</option>
+                <option value="tr">Türkçe</option>
+                <option value="pl">Polski</option>
+                <option value="vi">Tiếng Việt</option>
+                <option value="th">ไทย</option>
               </select>
             </div>
           </div>
-          <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus,.mp4,.mov,.mkv,.webm,.avi,.flv,.wmv,.m3u8" class="w-full mb-4 px-4 py-2 border border-gray-200 rounded text-sm cursor-pointer" placeholder="Select audio or video file..." />
-          <p class="text-xs text-gray-500 mb-4">Supports: MP3, M4A, WAV, AAC, FLAC, OPUS, MP4, MOV, MKV, WEBM, AVI, FLV, WMV</p>
+          
+          <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus,.mp4,.mov,.mkv,.webm,.avi,.flv,.wmv" class="w-full mb-4 px-4 py-3 border rounded text-sm cursor-pointer dark:bg-[#1e293b] dark:border-[#334155]" style="border-color: var(--border-light);" />
+          <p class="text-xs text-gray-500 mb-4">MP3, M4A, WAV, AAC, FLAC, OPUS, MP4, MOV, MKV, WEBM, AVI, FLV, WMV</p>
+          
           <div class="flex items-center gap-3">
-             <button id="start-job" class="px-4 py-1.5 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 transition">Transcribe</button>
-             <span id="job-status" class="text-sm text-gray-400 italic"></span>
+            <button id="start-job" class="px-6 py-2 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-700 transition flex items-center gap-2">
+              <i class="fa-solid fa-microphone"></i> <span id="btn-label">Start Transcription</span>
+            </button>
+            <span id="job-status" class="text-sm text-gray-400 italic"></span>
           </div>
-          <div id="error-display" class="mt-4 p-3 bg-red-50 text-red-600 rounded text-xs hidden whitespace-pre-wrap"></div>
+          <div id="error-display" class="mt-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded text-xs hidden whitespace-pre-wrap"></div>
         </div>
 
-        <!-- Notion-like Editor Area -->
-        <div id="editor" contenteditable="true" class="prose prose-zinc lg:prose-xl focus:outline-none min-h-[500px]" data-placeholder="Start writing your book here...">
-          <h1>Title of your book...</h1>
-          <p>The transcription will appear in the Assistant pane. Click 'Insert' to move text here.</p>
+        <!-- Editor Area -->
+        <div id="editor" contenteditable="true" class="prose prose-zinc lg:prose-xl focus:outline-none min-h-[500px] dark:prose-invert" style="color: var(--text-light);" data-placeholder="Your edited content appears here. Insert transcript segments from the Tools pane...">
+          <h2>Welcome to TranscriptPro</h2>
+          <p>Upload an audio or video file above, and watch it transcribe in real-time. Use the <strong>Tools</strong> panel to search, edit, and refine your transcript.</p>
         </div>
       </div>
     </div>
   </main>
 
-  <!-- Right Side Assistant Drawer -->
-  <aside id="assistant-pane" class="w-[400px] border-l border-[#ececeb] bg-[#fbfbfa] fixed right-0 top-0 h-full shadow-2xl sidebar-transition drawer-closed flex flex-col z-50">
-    <div class="h-12 border-b border-[#ececeb] flex items-center justify-between px-4 bg-white">
-       <div class="flex gap-4">
-         <button id="tab-chat" class="text-sm font-semibold border-b-2 border-black pb-3 pt-3">Assistant</button>
-         <button id="tab-transcript" class="text-sm font-medium text-gray-500 pb-3 pt-3">Transcript</button>
-       </div>
-       <button id="close-assistant" class="p-1 hover:bg-gray-100 rounded">
-         <i class="fa-solid fa-xmark text-gray-400"></i>
-       </button>
+  <!-- Right Tools Drawer -->
+  <aside id="assistant-pane" class="w-[400px] border-l border-[#ececeb] dark:border-[#334155] bg-[#fbfbfa] dark:bg-[#1e293b] fixed right-0 top-0 h-full shadow-2xl sidebar-transition drawer-closed flex flex-col z-50" style="border-color: var(--border-light); background-color: var(--bg-light);">
+    <div class="h-12 border-b border-[#ececeb] dark:border-[#334155] flex items-center justify-between px-4 bg-white dark:bg-[#0f172a]" style="border-color: var(--border-light);">
+      <div class="flex gap-4">
+        <button id="tab-chat" class="text-sm font-semibold border-b-2 border-black pb-3 pt-3 dark:border-white">AI Assistant</button>
+        <button id="tab-transcript" class="text-sm font-medium text-gray-500 pb-3 pt-3 dark:text-gray-400">Transcript</button>
+        <button id="tab-export" class="text-sm font-medium text-gray-500 pb-3 pt-3 dark:text-gray-400">Export</button>
+      </div>
+      <button id="close-assistant" class="p-1 hover:bg-gray-100 dark:hover:bg-[#334155] rounded transition">
+        <i class="fa-solid fa-xmark text-gray-400"></i>
+      </button>
     </div>
 
-    <!-- Assistant/Chat View -->
+    <!-- AI Assistant View -->
     <div id="view-chat" class="flex-1 flex flex-col overflow-hidden">
-      <!-- LLM Selector -->
-      <div class="px-4 py-3 border-b border-[#ececeb] flex flex-col gap-2 bg-zinc-50">
+      <div class="px-4 py-3 border-b border-[#ececeb] dark:border-[#334155] flex flex-col gap-2 bg-zinc-50 dark:bg-[#0f172a]" style="border-color: var(--border-light);">
         <label class="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1">
           <i class="fa-solid fa-microchip"></i> LLM Provider
         </label>
         <div class="grid grid-cols-2 gap-2">
-          <select id="select-provider" class="text-xs bg-white border border-zinc-200 rounded p-1.5 outline-none hover:border-black cursor-pointer shadow-sm">
-          </select>
-          <select id="select-model" class="text-xs bg-white border border-zinc-200 rounded p-1.5 outline-none hover:border-black cursor-pointer shadow-sm">
-          </select>
+          <select id="select-provider" class="text-xs bg-white dark:bg-[#1e293b] border border-zinc-200 dark:border-[#334155] rounded p-1.5 outline-none hover:border-black cursor-pointer shadow-sm transition"></select>
+          <select id="select-model" class="text-xs bg-white dark:bg-[#1e293b] border border-zinc-200 dark:border-[#334155] rounded p-1.5 outline-none hover:border-black cursor-pointer shadow-sm transition"></select>
         </div>
       </div>
 
       <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-6">
         <div class="flex gap-3">
           <div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div>
-          <div class="text-sm leading-relaxed text-[#37352f]">
-            I'm your Arabic book writing assistant. Once the transcript is ready, I can help you outline chapters, summarize sections, or refine the language.
+          <div class="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+            I'm your AI assistant. Once you upload and transcribe audio, I can help you summarize, rewrite, extract key points, or answer questions about the content.
           </div>
         </div>
       </div>
-      <div class="p-4 bg-white border-t border-[#ececeb]">
+
+      <div class="p-4 bg-white dark:bg-[#0f172a] border-t border-[#ececeb] dark:border-[#334155]" style="border-color: var(--border-light);">
         <div class="relative">
-          <textarea id="chat-input" rows="3" class="w-full p-3 pr-10 border border-[#ececeb] rounded-lg text-sm focus:ring-1 focus:ring-black outline-none resize-none" placeholder="Ask assistant..."></textarea>
-          <button id="btn-chat-send" class="absolute right-3 bottom-3 text-gray-400 hover:text-black">
+          <textarea id="chat-input" rows="3" class="w-full p-3 pr-10 border border-[#ececeb] dark:border-[#334155] dark:bg-[#1e293b] dark:text-white rounded-lg text-sm focus:ring-1 focus:ring-black outline-none resize-none transition" placeholder="Ask me anything about the transcript..." style="border-color: var(--border-light);"></textarea>
+          <button id="btn-chat-send" class="absolute right-3 bottom-3 text-gray-400 hover:text-black dark:hover:text-white transition">
             <i class="fa-solid fa-paper-plane"></i>
           </button>
         </div>
@@ -167,20 +258,65 @@
     </div>
 
     <!-- Transcript View -->
-    <div id="view-transcript" class="flex-1 hidden flex flex-col overflow-hidden bg-white">
-      <div id="transcript-content" class="flex-1 overflow-y-auto p-6 arabic-text text-lg leading-loose text-gray-700 whitespace-pre-wrap">
-        Waiting for transcript...
+    <div id="view-transcript" class="flex-1 hidden flex flex-col overflow-hidden">
+      <div class="px-4 py-3 border-b border-[#ececeb] dark:border-[#334155] flex gap-2" style="border-color: var(--border-light);">
+        <input type="text" id="transcript-search" class="flex-1 px-3 py-1 border border-[#ececeb] dark:border-[#334155] dark:bg-[#1e293b] dark:text-white rounded text-xs outline-none focus:ring-1 focus:ring-black transition" placeholder="Search transcript..." style="border-color: var(--border-light);" />
+        <button id="btn-copy-all" class="px-2 py-1 hover:bg-gray-100 dark:hover:bg-[#334155] rounded transition text-xs" title="Copy all to clipboard">
+          <i class="fa-solid fa-copy"></i>
+        </button>
       </div>
-      <div class="p-4 border-t border-[#ececeb]">
-        <button id="btn-insert-transcript" class="w-full py-2 bg-[#fbfbfa] border border-[#ececeb] rounded text-sm font-medium hover:bg-[#efefed] transition">Insert Full Transcript to Editor</button>
+
+      <div id="transcript-stats" class="px-4 py-2 flex gap-2 border-b border-[#ececeb] dark:border-[#334155] text-[10px] flex-wrap" style="border-color: var(--border-light);">
+        <div class="stat-box">Words: <span id="stat-words">0</span></div>
+        <div class="stat-box">Duration: <span id="stat-duration">0s</span></div>
+        <div class="stat-box">Processing: <span id="stat-time">-</span></div>
       </div>
+
+      <div id="transcript-content" class="flex-1 overflow-y-auto p-6 text-sm leading-relaxed dark:text-gray-300">
+        <div class="text-gray-400">Upload and transcribe audio to see the transcript here...</div>
+      </div>
+
+      <div class="p-4 border-t border-[#ececeb] dark:border-[#334155] flex gap-2" style="border-color: var(--border-light);">
+        <button id="btn-insert-transcript" class="flex-1 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-plus"></i> Insert to Editor
+        </button>
+      </div>
+    </div>
+
+    <!-- Export View -->
+    <div id="view-export" class="flex-1 hidden flex flex-col overflow-hidden p-4 space-y-3">
+      <p class="text-xs text-gray-500 dark:text-gray-400">Export your transcript in multiple formats:</p>
+      
+      <button id="btn-export-txt" class="w-full py-2 px-4 bg-gray-100 dark:bg-[#334155] hover:bg-gray-200 dark:hover:bg-[#475569] rounded text-sm font-medium transition flex items-center gap-2">
+        <i class="fa-solid fa-file-alt"></i> Download as TXT
+      </button>
+      
+      <button id="btn-export-srt" class="w-full py-2 px-4 bg-gray-100 dark:bg-[#334155] hover:bg-gray-200 dark:hover:bg-[#475569] rounded text-sm font-medium transition flex items-center gap-2">
+        <i class="fa-solid fa-closed-captioning"></i> Download as SRT (Subtitles)
+      </button>
+      
+      <button id="btn-export-md" class="w-full py-2 px-4 bg-gray-100 dark:bg-[#334155] hover:bg-gray-200 dark:hover:bg-[#475569] rounded text-sm font-medium transition flex items-center gap-2">
+        <i class="fa-solid fa-markdown"></i> Download as Markdown
+      </button>
+      
+      <button id="btn-export-json" class="w-full py-2 px-4 bg-gray-100 dark:bg-[#334155] hover:bg-gray-200 dark:hover:bg-[#475569] rounded text-sm font-medium transition flex items-center gap-2">
+        <i class="fa-solid fa-code"></i> Download as JSON
+      </button>
+
+      <hr class="my-2 border-[#ececeb] dark:border-[#334155]" style="border-color: var(--border-light);">
+      
+      <button id="btn-copy-transcript" class="w-full py-2 px-4 bg-blue-600 text-white hover:bg-blue-700 rounded text-sm font-medium transition flex items-center justify-center gap-2">
+        <i class="fa-solid fa-copy"></i> Copy to Clipboard
+      </button>
     </div>
   </aside>
 
   <script>
     const api = (path) => `${window.location.origin}/api${path}`;
     let currentJob = null;
+    let currentTranscript = null;
     let poller = null;
+    let startTime = null;
 
     const providers = {
       mimo: {
@@ -203,39 +339,76 @@
         ]
       },
       zai: {
-        name: "Z.ai (Coding PAAS)",
+        name: "Z.ai (GLM)",
         url: "https://api.z.ai/api/coding/paas/v4/chat/completions#",
         key: "06ed76f259a24ecfb3c3193519be3547.HvNDltxpOeHLnywJ",
         models: ["glm-4.5", "glm-4.6", "glm-4.7"]
       },
     };
 
-    // Elements
+    // DOM Elements
     const elements = {
       editor: document.getElementById('editor'),
       audioFile: document.getElementById('audio-file'),
       languageSelect: document.getElementById('language-select'),
       startJob: document.getElementById('start-job'),
+      btnLabel: document.getElementById('btn-label'),
       jobStatus: document.getElementById('job-status'),
       errorDisplay: document.getElementById('error-display'),
+      headerStats: document.getElementById('header-stats'),
+      
       chatMessages: document.getElementById('chat-messages'),
       chatInput: document.getElementById('chat-input'),
       chatSend: document.getElementById('btn-chat-send'),
+      
       transcriptContent: document.getElementById('transcript-content'),
+      transcriptSearch: document.getElementById('transcript-search'),
+      btnCopyAll: document.getElementById('btn-copy-all'),
+      statWords: document.getElementById('stat-words'),
+      statDuration: document.getElementById('stat-duration'),
+      statTime: document.getElementById('stat-time'),
+      
       assistantPane: document.getElementById('assistant-pane'),
       toggleAssistant: document.getElementById('toggle-assistant'),
       closeAssistant: document.getElementById('close-assistant'),
+      
       tabChat: document.getElementById('tab-chat'),
       tabTranscript: document.getElementById('tab-transcript'),
+      tabExport: document.getElementById('tab-export'),
       viewChat: document.getElementById('view-chat'),
       viewTranscript: document.getElementById('view-transcript'),
-      cookieFile: document.getElementById('cookie-file'),
-      cookieStatus: document.getElementById('cookie-status'),
+      viewExport: document.getElementById('view-export'),
+      
+      btnInsertTranscript: document.getElementById('btn-insert-transcript'),
+      btnExportTxt: document.getElementById('btn-export-txt'),
+      btnExportSrt: document.getElementById('btn-export-srt'),
+      btnExportMd: document.getElementById('btn-export-md'),
+      btnExportJson: document.getElementById('btn-export-json'),
+      btnCopyTranscript: document.getElementById('btn-copy-transcript'),
+      
       selectProvider: document.getElementById('select-provider'),
-      selectModel: document.getElementById('select-model')
+      selectModel: document.getElementById('select-model'),
+      
+      themeToggle: document.getElementById('theme-toggle'),
+      btnClearSession: document.getElementById('btn-clear-session')
     };
 
-    // Populate Providers
+    // Theme Management
+    function toggleTheme() {
+      document.body.classList.toggle('dark-mode');
+      localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+      elements.themeToggle.innerHTML = document.body.classList.contains('dark-mode') 
+        ? '<i class="fa-solid fa-sun"></i>' 
+        : '<i class="fa-solid fa-moon"></i>';
+    }
+
+    if (localStorage.getItem('theme') === 'dark') {
+      document.body.classList.add('dark-mode');
+      elements.themeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
+    }
+    elements.themeToggle.onclick = toggleTheme;
+
+    // Initialize Providers
     function initProviders() {
       for (const id in providers) {
         const opt = document.createElement('option');
@@ -258,7 +431,25 @@
     }
     initProviders();
 
-    // UI State Logic
+    // Tab Switching
+    function switchTab(tabName) {
+      elements.tabChat.classList.toggle('border-b-2 border-black font-semibold', tabName === 'chat');
+      elements.tabChat.classList.toggle('text-gray-500 font-medium', tabName !== 'chat');
+      elements.tabTranscript.classList.toggle('border-b-2 border-black font-semibold', tabName === 'transcript');
+      elements.tabTranscript.classList.toggle('text-gray-500 font-medium', tabName !== 'transcript');
+      elements.tabExport.classList.toggle('border-b-2 border-black font-semibold', tabName === 'export');
+      elements.tabExport.classList.toggle('text-gray-500 font-medium', tabName !== 'export');
+      
+      elements.viewChat.classList.toggle('hidden', tabName !== 'chat');
+      elements.viewTranscript.classList.toggle('hidden', tabName !== 'transcript');
+      elements.viewExport.classList.toggle('hidden', tabName !== 'export');
+    }
+
+    elements.tabChat.onclick = () => switchTab('chat');
+    elements.tabTranscript.onclick = () => switchTab('transcript');
+    elements.tabExport.onclick = () => switchTab('export');
+
+    // Drawer Toggle
     elements.toggleAssistant.onclick = () => {
       elements.assistantPane.classList.remove('drawer-closed');
       elements.assistantPane.classList.add('drawer-open');
@@ -268,25 +459,7 @@
       elements.assistantPane.classList.add('drawer-closed');
     };
 
-    elements.tabChat.onclick = () => {
-      elements.tabChat.classList.add('border-b-2', 'border-black', 'font-semibold');
-      elements.tabChat.classList.remove('text-gray-500', 'font-medium');
-      elements.tabTranscript.classList.remove('border-b-2', 'border-black', 'font-semibold');
-      elements.tabTranscript.classList.add('text-gray-500', 'font-medium');
-      elements.viewChat.classList.remove('hidden');
-      elements.viewTranscript.classList.add('hidden');
-    };
-
-    elements.tabTranscript.onclick = () => {
-      elements.tabTranscript.classList.add('border-b-2', 'border-black', 'font-semibold');
-      elements.tabTranscript.classList.remove('text-gray-500', 'font-medium');
-      elements.tabChat.classList.remove('border-b-2', 'border-black', 'font-semibold');
-      elements.tabChat.classList.add('text-gray-500', 'font-medium');
-      elements.viewTranscript.classList.remove('hidden');
-      elements.viewChat.classList.add('hidden');
-    };
-
-    // Helper functions
+    // Utilities
     function addChatBubble(role, text) {
       const isAI = role === 'assistant';
       const div = document.createElement('div');
@@ -294,19 +467,14 @@
       
       const icon = isAI 
         ? '<div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div>'
-        : '<div class="w-6 h-6 bg-zinc-200 rounded flex items-center justify-center text-zinc-600 text-[10px] mt-1 shrink-0">ME</div>';
+        : '<div class="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">YOU</div>';
       
-      const insertBtn = isAI 
-        ? `<button onclick="insertAtCursor(\`${text.replace(/`/g, '\\`').replace(/\n/g, '<br>')}\`)" class="mt-2 text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1"><i class="fa-solid fa-plus"></i> Insert into Book</button>`
-        : '';
-
       div.innerHTML = `
         ${icon}
-        <div class="flex flex-col ${isAI ? '' : 'items-end'}">
-          <div class="text-sm leading-relaxed p-2 rounded-lg ${isAI ? 'bg-zinc-50 border border-zinc-100' : 'bg-blue-600 text-white'} ${text.match(/[\u0600-\u06FF]/) ? 'arabic-text' : ''}">
+        <div class="flex flex-col ${isAI ? '' : 'items-end'} max-w-xs">
+          <div class="text-sm leading-relaxed p-3 rounded-lg ${isAI ? 'bg-zinc-100 dark:bg-[#334155] text-gray-900 dark:text-gray-100' : 'bg-blue-600 text-white'} break-words">
             ${text.replace(/\n/g, '<br>')}
           </div>
-          ${insertBtn}
         </div>
       `;
       elements.chatMessages.appendChild(div);
@@ -328,19 +496,62 @@
       range.insertNode(fragment);
       elements.editor.focus();
     }
-    window.insertAtCursor = insertAtCursor; // Make available to global scope
+    window.insertAtCursor = insertAtCursor;
 
-    // API interactions
+    function formatTranscriptForDisplay(transcript, highlightText = '') {
+      let html = '';
+      const lines = transcript.split('\n');
+      
+      lines.forEach((line, idx) => {
+        if (!line.trim()) return;
+        
+        const match = line.match(/^\[(\d+\.?\d*)-(\d+\.?\d*)\]\s(.+)/);
+        if (match) {
+          const [, start, end, text] = match;
+          let displayText = text;
+          
+          if (highlightText) {
+            const regex = new RegExp(`(${highlightText})`, 'gi');
+            displayText = text.replace(regex, '<span class="search-highlight">$1</span>');
+          }
+          
+          html += `<div class="transcript-segment">
+            <span class="timestamp" onclick="document.getElementById('editor').focus()">[${start}s]</span>
+            <span>${displayText}</span>
+            <span class="copy-btn" onclick="navigator.clipboard.writeText('${text.replace(/'/g, "\\'")}'); alert('Copied!')"><i class="fa-solid fa-copy"></i></span>
+          </div>`;
+        }
+      });
+      
+      return html || '<div class="text-gray-400">No transcript available</div>';
+    }
+
+    function updateStats() {
+      if (!currentTranscript) return;
+      
+      const words = currentTranscript.split(/\s+/).filter(w => w.length > 0).length;
+      const durationMatch = currentTranscript.match(/\[[\d.]+-([\d.]+)\]/g);
+      const duration = durationMatch ? parseFloat(durationMatch[durationMatch.length - 1].match(/[\d.]+/)[1]) : 0;
+      const processingTime = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
+      
+      elements.statWords.textContent = words;
+      elements.statDuration.textContent = duration > 60 ? `${Math.round(duration / 60)}m ${Math.round(duration % 60)}s` : Math.round(duration) + 's';
+      elements.statTime.textContent = processingTime > 0 ? processingTime + 's' : '-';
+    }
+
+    // Transcription
     async function startJob() {
       const file = elements.audioFile.files[0];
       if (!file) {
-        alert('Please select an audio or video file');
+        alert('Please select a file');
         return;
       }
       
       elements.errorDisplay.classList.add('hidden');
       elements.startJob.disabled = true;
-      elements.jobStatus.textContent = 'Uploading and transcribing...';
+      elements.btnLabel.textContent = 'Transcribing...';
+      elements.jobStatus.textContent = '⏳ Uploading...';
+      startTime = Date.now();
       
       try {
         const formData = new FormData();
@@ -354,27 +565,27 @@
         if (!res.ok) throw new Error(await res.text());
         const { job_id } = await res.json();
         currentJob = job_id;
+        currentTranscript = '';
         pollJob(job_id);
       } catch (err) {
-        elements.jobStatus.textContent = 'Failed';
+        elements.jobStatus.textContent = '❌ Failed';
         elements.errorDisplay.textContent = err.message;
         elements.errorDisplay.classList.remove('hidden');
         elements.startJob.disabled = false;
+        elements.btnLabel.textContent = 'Start Transcription';
       }
     }
 
     function pollJob(jobId) {
-      // Connect to WebSocket for live transcript updates
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}${apiBase}/ws/jobs/${jobId}/transcript`;
+      const wsUrl = `${protocol}//${window.location.host}/api/ws/jobs/${jobId}/transcript`;
       
       try {
         const ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
-          console.log('WebSocket connected for live transcription');
-          elements.jobStatus.textContent = 'Transcribing (live)...';
-          // Also start polling job status for completion
+          elements.jobStatus.textContent = '🔴 Transcribing live...';
+          
           if (poller) clearInterval(poller);
           poller = setInterval(async () => {
             try {
@@ -392,69 +603,71 @@
           const data = JSON.parse(event.data);
           
           if (data.type === 'segment') {
-            // Add new segment to transcript
-            elements.transcriptContent.textContent = data.transcript;
-            elements.jobStatus.textContent = 'Transcribing (live)...';
+            currentTranscript = data.transcript;
+            elements.transcriptContent.innerHTML = formatTranscriptForDisplay(currentTranscript);
+            updateStats();
           } else if (data.type === 'complete') {
-            elements.jobStatus.textContent = 'Transcribed ✓';
+            elements.jobStatus.textContent = '✅ Done';
+            elements.btnLabel.textContent = 'Start Transcription';
             elements.startJob.disabled = false;
-            // Open assistant to show transcript
+            updateStats();
             elements.toggleAssistant.click();
-            elements.tabTranscript.click();
+            switchTab('transcript');
           } else if (data.type === 'error') {
-            elements.jobStatus.textContent = 'Failed';
+            elements.jobStatus.textContent = '❌ Error';
             elements.errorDisplay.textContent = data.error;
             elements.errorDisplay.classList.remove('hidden');
             elements.startJob.disabled = false;
+            elements.btnLabel.textContent = 'Start Transcription';
           }
         };
         
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
-          elements.jobStatus.textContent = 'Connection error';
+          elements.jobStatus.textContent = '⚠️ Connection error';
         };
         
         ws.onclose = () => {
-          console.log('WebSocket closed');
           if (poller) clearInterval(poller);
         };
       } catch (e) {
-        console.error('WebSocket connection failed:', e);
-        // Fallback to polling
+        console.error('WebSocket failed, falling back to polling');
         fallbackPollJob(jobId);
       }
     }
-    
+
     function fallbackPollJob(jobId) {
-      // Fallback to HTTP polling if WebSocket fails
       if (poller) clearInterval(poller);
       poller = setInterval(async () => {
         try {
           const res = await fetch(api(`/jobs/${jobId}`));
           const job = await res.json();
-          elements.jobStatus.textContent = `Status: ${job.status}...`;
           
           if (job.status === 'done') {
             clearInterval(poller);
-            elements.jobStatus.textContent = 'Transcribed ✓';
+            elements.jobStatus.textContent = '✅ Done';
+            elements.btnLabel.textContent = 'Start Transcription';
             const tRes = await fetch(api(`/jobs/${jobId}/transcript`));
             const { transcript } = await tRes.json();
-            elements.transcriptContent.textContent = transcript;
+            currentTranscript = transcript;
+            elements.transcriptContent.innerHTML = formatTranscriptForDisplay(currentTranscript);
+            updateStats();
             elements.startJob.disabled = false;
             elements.toggleAssistant.click();
-            elements.tabTranscript.click();
-          }
-          if (job.status === 'failed') {
+            switchTab('transcript');
+          } else if (job.status === 'failed') {
             clearInterval(poller);
-            elements.jobStatus.textContent = 'Failed';
+            elements.jobStatus.textContent = '❌ Failed';
             elements.errorDisplay.textContent = job.error || 'Transcription failed';
             elements.errorDisplay.classList.remove('hidden');
             elements.startJob.disabled = false;
+            elements.btnLabel.textContent = 'Start Transcription';
           }
         } catch (e) { console.error(e); }
-      }, 5000);
+      }, 2000);
     }
 
+    // Chat
     async function sendMessage() {
       const msg = elements.chatInput.value.trim();
       if (!msg || !currentJob) return;
@@ -481,41 +694,151 @@
         const { reply } = await res.json();
         addChatBubble('assistant', reply);
       } catch (err) {
-        addChatBubble('assistant', 'Error: ' + err.message);
+        addChatBubble('assistant', '❌ Error: ' + err.message);
       }
     }
 
-    // Cookie Upload
-    elements.cookieFile.onchange = async () => {
-      const file = elements.cookieFile.files[0];
-      if (!file) return;
-      const formData = new FormData();
-      formData.append('file', file);
-      elements.cookieStatus.textContent = 'Uploading...';
-      try {
-        const res = await fetch(api('/upload_cookies'), { method: 'POST', body: formData });
-        if (!res.ok) throw new Error('Upload failed');
-        elements.cookieStatus.textContent = 'Success ✓';
-        elements.cookieStatus.className = 'text-[10px] text-green-600';
-      } catch (err) {
-        elements.cookieStatus.textContent = 'Failed';
-        elements.cookieStatus.className = 'text-[10px] text-red-600';
+    // Transcript Search
+    elements.transcriptSearch.oninput = () => {
+      if (!currentTranscript) return;
+      const query = elements.transcriptSearch.value;
+      elements.transcriptContent.innerHTML = formatTranscriptForDisplay(currentTranscript, query);
+    };
+
+    // Export Functions
+    function downloadFile(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+
+    elements.btnExportTxt.onclick = () => {
+      if (!currentTranscript) return alert('No transcript to export');
+      downloadFile(currentTranscript, 'transcript.txt', 'text/plain');
+    };
+
+    elements.btnExportSrt.onclick = () => {
+      if (!currentTranscript) return alert('No transcript to export');
+      
+      let srtContent = '';
+      let index = 1;
+      const lines = currentTranscript.split('\n');
+      
+      lines.forEach(line => {
+        const match = line.match(/^\[(\d+\.?\d*)-(\d+\.?\d*)\]\s(.+)/);
+        if (match) {
+          const [, start, end, text] = match;
+          const formatTime = (sec) => {
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const s = Math.floor(sec % 60);
+            const ms = Math.round((parseFloat(sec) % 1) * 1000);
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+          };
+          srtContent += `${index}\n${formatTime(start)} --> ${formatTime(end)}\n${text}\n\n`;
+          index++;
+        }
+      });
+      
+      downloadFile(srtContent, 'transcript.srt', 'text/plain');
+    };
+
+    elements.btnExportMd.onclick = () => {
+      if (!currentTranscript) return alert('No transcript to export');
+      
+      let mdContent = '# Transcript\n\n';
+      const lines = currentTranscript.split('\n');
+      
+      lines.forEach(line => {
+        const match = line.match(/^\[(\d+\.?\d*)-(\d+\.?\d*)\]\s(.+)/);
+        if (match) {
+          const [, start, end, text] = match;
+          mdContent += `**[${start}s - ${end}s]** ${text}\n\n`;
+        }
+      });
+      
+      downloadFile(mdContent, 'transcript.md', 'text/markdown');
+    };
+
+    elements.btnExportJson.onclick = () => {
+      if (!currentTranscript) return alert('No transcript to export');
+      
+      const segments = [];
+      const lines = currentTranscript.split('\n');
+      
+      lines.forEach(line => {
+        const match = line.match(/^\[(\d+\.?\d*)-(\d+\.?\d*)\]\s(.+)/);
+        if (match) {
+          segments.push({
+            start: parseFloat(match[1]),
+            end: parseFloat(match[2]),
+            text: match[3]
+          });
+        }
+      });
+      
+      downloadFile(JSON.stringify({ segments }, null, 2), 'transcript.json', 'application/json');
+    };
+
+    elements.btnCopyTranscript.onclick = () => {
+      navigator.clipboard.writeText(currentTranscript);
+      alert('Transcript copied to clipboard!');
+    };
+
+    // Editor Insertion
+    elements.btnInsertTranscript.onclick = () => {
+      if (!currentTranscript) return;
+      insertAtCursor(currentTranscript.replace(/\[[\d.]+-([\d.]+)\]\s/g, '').substring(0, 2000));
+    };
+
+    // Session Management
+    elements.btnClearSession.onclick = () => {
+      if (confirm('Clear current session? This cannot be undone.')) {
+        currentJob = null;
+        currentTranscript = null;
+        elements.transcriptContent.innerHTML = '<div class="text-gray-400">Upload and transcribe audio to see the transcript here...</div>';
+        elements.chatMessages.innerHTML = '<div class="flex gap-3"><div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center text-white text-[10px] mt-1 shrink-0">AI</div><div class="text-sm leading-relaxed text-gray-700">Session cleared. Ready for a new transcription.</div></div>';
+        elements.audioFile.value = '';
+        elements.jobStatus.textContent = '';
       }
     };
 
-    // Event Listeners
-    elements.startJob.onclick = startJob;
-    elements.chatSend.onclick = sendMessage;
+    // Keyboard Shortcuts
+    document.onkeydown = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'k') {
+          e.preventDefault();
+          elements.startJob.click();
+        } else if (e.key === 'e') {
+          e.preventDefault();
+          switchTab('export');
+          elements.toggleAssistant.click();
+        } else if (e.key === 'shift') {
+          e.preventDefault();
+          elements.toggleAssistant.click();
+        }
+      }
+    };
+
+    // Chat Input Enter Key
     elements.chatInput.onkeydown = (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
       }
     };
-    document.getElementById('btn-insert-transcript').onclick = () => {
-      insertAtCursor(elements.transcriptContent.textContent);
-    };
 
+    // Initial Setup
+    elements.startJob.onclick = startJob;
+    elements.chatSend.onclick = sendMessage;
+    elements.btnCopyAll.onclick = () => {
+      navigator.clipboard.writeText(currentTranscript);
+      alert('Copied!');
+    };
   </script>
 </body>
 </html>

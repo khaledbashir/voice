@@ -355,21 +355,29 @@ def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optiona
     # Send chat with document attachment to trigger transcription
     chat_url = f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/chat"
     print(f"DEBUG: Sending chat request to {chat_url}")
+    print(f"DEBUG: Request payload size: ~{len(data_uri)/1024/1024:.1f} MB")
     
-    chat_resp = requests.post(
-        chat_url,
-        headers={**headers, "Content-Type": "application/json"},
-        json={
-            "message": "Please transcribe this audio file.",
-            "mode": "chat",
-            "attachments": [{
-                "name": audio_path.name,
-                "mime": "application/anythingllm-document",
-                "contentString": data_uri
-            }]
-        },
-        timeout=300  # 5 minute timeout for large files
-    )
+    try:
+        chat_resp = requests.post(
+            chat_url,
+            headers={**headers, "Content-Type": "application/json"},
+            json={
+                "message": "Please transcribe this audio file.",
+                "mode": "chat",
+                "attachments": [{
+                    "name": audio_path.name,
+                    "mime": "application/anythingllm-document",
+                    "contentString": data_uri
+                }]
+            },
+            timeout=600  # 10 minute timeout for large files
+        )
+    except requests.exceptions.Timeout as e:
+        print(f"ERROR: Request timed out after 10 minutes: {e}")
+        raise Exception(f"Transcription timed out - audio file too large or service busy")
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Request failed: {e}")
+        raise Exception(f"API request failed: {e}")
     
     print(f"DEBUG: AnythingLLM response status: {chat_resp.status_code}")
     

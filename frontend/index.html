@@ -76,11 +76,12 @@
     <!-- Editor -->
     <div class="flex-1 overflow-y-auto px-4 md:px-24 py-12">
       <div class="max-w-3xl mx-auto">
-        <!-- Job Input Area -->
+    <!-- Job Input Area -->
         <div class="mb-12">
-          <input type="text" id="job-url" placeholder="Paste YouTube link here..." class="w-full text-4xl font-bold border-none outline-none placeholder-gray-200 mb-4" />
+          <h2 class="text-2xl font-bold mb-4">Upload Audio File</h2>
+          <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus" class="w-full mb-4 px-4 py-2 border border-gray-200 rounded text-sm cursor-pointer" />
           <div class="flex items-center gap-3">
-             <button id="start-job" class="px-4 py-1.5 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 transition">Create Transcript</button>
+             <button id="start-job" class="px-4 py-1.5 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 transition">Transcribe</button>
              <span id="job-status" class="text-sm text-gray-400 italic"></span>
           </div>
           <div id="error-display" class="mt-4 p-3 bg-red-50 text-red-600 rounded text-xs hidden whitespace-pre-wrap"></div>
@@ -187,7 +188,7 @@
     // Elements
     const elements = {
       editor: document.getElementById('editor'),
-      jobUrl: document.getElementById('job-url'),
+      audioFile: document.getElementById('audio-file'),
       startJob: document.getElementById('start-job'),
       jobStatus: document.getElementById('job-status'),
       errorDisplay: document.getElementById('error-display'),
@@ -305,18 +306,24 @@
 
     // API interactions
     async function startJob() {
-      const url = elements.jobUrl.value.trim();
-      if (!url) return;
+      const file = elements.audioFile.files[0];
+      if (!file) {
+        alert('Please select an audio file');
+        return;
+      }
       
       elements.errorDisplay.classList.add('hidden');
       elements.startJob.disabled = true;
-      elements.jobStatus.textContent = 'Starting process...';
+      elements.jobStatus.textContent = 'Uploading and transcribing...';
       
       try {
-        const res = await fetch(api('/jobs'), {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('language', 'ar');
+        
+        const res = await fetch(api('/upload_audio'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url })
+          body: formData
         });
         if (!res.ok) throw new Error(await res.text());
         const { job_id } = await res.json();

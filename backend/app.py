@@ -35,6 +35,40 @@ async def upload_cookies(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/api/upload_audio")
+async def upload_audio(file: UploadFile = File(...), language: str = "ar"):
+    """Upload audio file directly for transcription"""
+    try:
+        job_id = str(uuid.uuid4())
+        folder = DATA_DIR / job_id
+        folder.mkdir(parents=True, exist_ok=True)
+        
+        # Save uploaded file
+        audio_path = folder / file.filename
+        content = await file.read()
+        audio_path.write_bytes(content)
+        
+        # Create job
+        transcript_path = folder / "transcript.txt"
+        job = Job(
+            id=job_id,
+            url=f"uploaded:{file.filename}",
+            language=language,
+            model_size="large-v3",
+            status="transcribing",
+            audio_path=audio_path,
+            transcript_path=transcript_path
+        )
+        jobs[job_id] = job
+        
+        # Start transcription in background
+        executor.submit(process_uploaded_audio, job)
+        
+        return {"job_id": job_id, "status": "transcribing"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/upload_potoken")
 async def upload_potoken(token: str = Form(...)):
     token_path = DATA_DIR / "potoken.txt"
@@ -48,7 +82,7 @@ executor = ThreadPoolExecutor(max_workers=int(os.getenv("WORKERS", "2")))
 
 
 class CreateJob(BaseModel):
-    url: str
+    url: Optional[str] = None
     language: str = "ar"
     model_size: str = os.getenv("WHISPER_MODEL", "large-v3")
 
@@ -62,7 +96,7 @@ class ChatRequest(BaseModel):
 
 
 class Job:
-    def __init__(self, job_id: str, url: str, language: str, model_size: str):
+    def __init__(self, job_id: str, url: str, language: str, model_size: str, audio_path: Optional[Path] = None, transcript_path: Optional[Path] = None):
         self.id = job_id
         self.url = url
         self.language = language
@@ -70,7 +104,8 @@ class Job:
         self.status = "pending"
         self.error: Optional[str] = None
         self.video_path: Optional[Path] = None
-        self.transcript_path: Optional[Path] = None
+        self.audio_path: Optional[Path] = audio_path
+        self.transcript_path: Optional[Path] = transcript_path
 
 
 jobs: Dict[str, Job] = {}
@@ -299,6 +334,23 @@ def call_llm(message: str, context: str, model: Optional[str] = None, api_url: O
 # Serve static frontend if it exists
 if STATIC_DIR.exists():
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
+
+def process_uploaded_audio(job: Job):
+    """Process audio file that was uploaded directly"""
+    try:
+        job.status = "transcribing"
+        
+        if not job.audio_path or not job.audio_path.exists():
+            raise Exception(f"Audio file not found: {job.audio_path}")
+        
+        print(f"DEBUG: Transcribing uploaded audio: {job.audio_path}")
+        transcribe_video(job.audio_path, job.transcript_path, job.language, job.model_size)
+        job.status = "done"
+    except Exception as exc:  # noqa: BLE001
+        job.status = "failed"
+        job.error = str(exc)
+        print(f"DEBUG: Job failed with error: {str(exc)}")
 
 
 if __name__ == "__main__":

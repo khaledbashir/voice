@@ -117,7 +117,20 @@ def process_job(job: Job):
         folder.mkdir(parents=True, exist_ok=True)
 
         video_path = folder / "video.mp4"
+        print(f"DEBUG: Starting download to {video_path}")
         download_video(job.url, video_path)
+        
+        # Verify the file actually exists before transcribing
+        if not video_path.exists():
+            # Sometimes yt-dlp might name it video.mp4.m4a or similar if merging fails
+            # Search for anything starting with 'video.' in the folder
+            actual_files = list(folder.glob("video.*"))
+            if actual_files:
+                video_path = actual_files[0]
+                print(f"DEBUG: Found downloaded file at {video_path}")
+            else:
+                raise Exception(f"Download failed: {video_path} does not exist after yt-dlp run")
+        
         job.video_path = video_path
 
         job.status = "transcribing"
@@ -129,6 +142,7 @@ def process_job(job: Job):
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
         job.error = str(exc)
+        print(f"DEBUG: Job failed with error: {str(exc)}")
 
 
 def download_video(url: str, output_path: Path):

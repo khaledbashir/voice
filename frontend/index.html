@@ -29,6 +29,7 @@
     .user { background: #172554; }
     .assistant { background: #0f172a; border: 1px solid #1f2937; }
     .transcript { white-space: pre-wrap; max-height: 200px; overflow: auto; border: 1px solid #1f2937; padding: 10px; border-radius: 10px; background: #0b1220; color: var(--muted); }
+    .error-msg { color: #f87171; font-size: 14px; margin-top: 8px; border: 1px solid #ef4444; padding: 10px; border-radius: 8px; display: none; }
   </style>
 </head>
 <body>
@@ -45,6 +46,7 @@
         </label>
         <button id="submit" type="submit">Start</button>
         <div class="status" id="job-status"></div>
+        <div id="error-display" class="error-msg"></div>
       </form>
     </div>
 
@@ -67,6 +69,7 @@ const api = (path) => `${window.location.origin}/api${path}`;
 let currentJob = null;
 let poller = null;
 const statusEl = document.getElementById('job-status');
+const errorEl = document.getElementById('error-display');
 const transcriptEl = document.getElementById('transcript');
 const transcriptStatusEl = document.getElementById('transcript-status');
 const chatEl = document.getElementById('chat');
@@ -80,6 +83,7 @@ function addBubble(sender, text) {
 }
 
 async function createJob(url) {
+  errorEl.style.display = 'none';
   const res = await fetch(api('/jobs'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -125,6 +129,8 @@ function startPolling(jobId) {
       if (job.status === 'failed') {
         clearInterval(poller);
         transcriptStatusEl.textContent = 'Failed';
+        errorEl.textContent = `Error: ${job.error || 'Unknown error'}`;
+        errorEl.style.display = 'block';
       }
     } catch (e) {
       console.error(e);

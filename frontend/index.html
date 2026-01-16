@@ -40,6 +40,16 @@
     </div>
 
     <div class="card">
+      <form id="cookie-form" style="display: flex; align-items: center; gap: 10px;">
+        <p style="margin: 0; font-size: 14px; color: var(--muted);">YouTube blocked? Upload cookies.txt:</p>
+        <input type="file" id="cookie-file" accept=".txt" style="display: none;" />
+        <button type="button" onclick="document.getElementById('cookie-file').click()" style="padding: 6px 12px; font-size: 14px; background: #374151; color: white;">Pick File</button>
+        <button type="submit" id="upload-btn" style="padding: 6px 12px; font-size: 14px;">Upload</button>
+        <span id="cookie-status" style="font-size: 12px; color: var(--accent);"></span>
+      </form>
+    </div>
+
+    <div class="card">
       <form id="job-form">
         <label> YouTube URL
           <input id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required />
@@ -137,6 +147,28 @@ function startPolling(jobId) {
     }
   }, 4000);
 }
+
+document.getElementById('cookie-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fileInput = document.getElementById('cookie-file');
+  if (!fileInput.files[0]) return;
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  const status = document.getElementById('cookie-status');
+  status.textContent = 'Uploading...';
+  try {
+    const res = await fetch(api('/upload_cookies'), {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    status.textContent = 'Success!';
+    setTimeout(() => { status.textContent = ''; }, 3000);
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    status.style.color = '#f87171';
+  }
+});
 
 document.getElementById('job-form').addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 import requests
 import yt_dlp
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -17,13 +17,23 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", "../frontend"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="YouTube Arabic Transcriber", version="0.1.0")
+app = FastAPI(title="YouTube Arabic Transcriber", version="0.1.1")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.post("/api/upload_cookies")
+async def upload_cookies(file: UploadFile = File(...)):
+    cookie_path = DATA_DIR / "cookies.txt"
+    try:
+        content = await file.read()
+        cookie_path.write_bytes(content)
+        return {"message": "cookies.txt uploaded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("WORKERS", "2")))
 

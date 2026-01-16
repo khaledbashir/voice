@@ -280,7 +280,9 @@ def transcribe_video(video_path: Path, transcript_path: Path, language: str, mod
     compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
     device = os.getenv("WHISPER_DEVICE", "cpu")
     model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    segments, _ = model.transcribe(str(video_path), language=language)
+    # If language is 'auto', pass None to let faster-whisper auto-detect
+    lang_param = None if language == "auto" else language
+    segments, _ = model.transcribe(str(video_path), language=lang_param)
     lines = []
     for segment in segments:
         lines.append(f"[{segment.start:.2f}-{segment.end:.2f}] {segment.text}")

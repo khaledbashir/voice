@@ -323,13 +323,16 @@ def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optiona
     """Transcribe audio file using AnythingLLM API"""
     import base64
     
+    print(f"DEBUG: Starting AnythingLLM transcription for {audio_path.name}")
     headers = {"Authorization": f"Bearer {ALLM_API_KEY}"}
     
     # Read and Base64 encode the audio file
+    print(f"DEBUG: Reading audio file ({audio_path.stat().st_size} bytes)")
     with open(audio_path, "rb") as f:
         audio_bytes = f.read()
     
     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    print(f"DEBUG: Base64 encoded ({len(audio_b64)} chars)")
     
     # Detect MIME type from file extension
     ext = audio_path.suffix.lower()
@@ -344,13 +347,17 @@ def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optiona
         ".webm": "video/webm"
     }
     audio_mime = mime_map.get(ext, "audio/mpeg")
+    print(f"DEBUG: Detected MIME type: {audio_mime}")
     
     # Create Data URI
     data_uri = f"data:{audio_mime};base64,{audio_b64}"
     
     # Send chat with document attachment to trigger transcription
+    chat_url = f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/chat"
+    print(f"DEBUG: Sending chat request to {chat_url}")
+    
     chat_resp = requests.post(
-        f"{ALLM_BASE_URL}/workspace/{ALLM_WORKSPACE}/chat",
+        chat_url,
         headers={**headers, "Content-Type": "application/json"},
         json={
             "message": "Please transcribe this audio file.",
@@ -360,17 +367,27 @@ def anythingllm_transcribe(audio_path: Path, transcript_path: Path, job: Optiona
                 "mime": "application/anythingllm-document",
                 "contentString": data_uri
             }]
-        }
+        },
+        timeout=300  # 5 minute timeout for large files
     )
     
+    print(f"DEBUG: AnythingLLM response status: {chat_resp.status_code}")
+    
     if chat_resp.status_code != 200:
-        raise Exception(f"Chat failed: {chat_resp.text}")
+        print(f"ERROR: AnythingLLM API failed with status {chat_resp.status_code}")
+        print(f"ERROR: Response body: {chat_resp.text}")
+        raise Exception(f"Chat failed: HTTP {chat_resp.status_code} - {chat_resp.text}")
     
     chat_data = chat_resp.json()
+    print(f"DEBUG: Received chat response: {str(chat_data)[:200]}")
+    
     transcript_text = chat_data.get("textResponse", "")
+    if not transcript_text:
+        print(f"WARNING: Empty textResponse from AnythingLLM. Full response: {chat_data}")
     
     # Write transcript to file
     transcript_path.write_text(transcript_text, encoding="utf-8")
+    print(f"DEBUG: Wrote transcript to {transcript_path} ({len(transcript_text)} chars)")
 
 
 def call_llm(message: str, context: str, model: Optional[str] = None, api_url: Optional[str] = None, api_key: Optional[str] = None) -> str:
@@ -425,8 +442,17 @@ def process_uploaded_audio(job: Job):
             raise Exception(f"Audio file not found: {job.audio_path}")
         
         print(f"DEBUG: Transcribing uploaded audio via AnythingLLM: {job.audio_path}")
-        anythingllm_transcribe(job.audio_path, job.transcript_path, job=job)
-        job.status = "done"
+        
+        # Call AnythingLLM transcription
+        try:
+            anythingllm_transcribe(job.audio_path, job.transcript_path, job=job)
+            job.status = "done"
+            print(f"DEBUG: Transcription completed successfully for {job.id}")
+        except Exception as transcribe_error:
+            print(f"ERROR: AnythingLLM transcription failed: {transcribe_error}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Send final completion message to all connected clients
         import asyncio

@@ -12,7 +12,7 @@ services:
       - STATIC_DIR=/app/frontend
       - WHISPER_MODEL=large-v3
       - WHISPER_DEVICE=cpu
-      - WHISPER_COMPUTE_TYPE=int8_float16
+      - WHISPER_COMPUTE_TYPE=int8
       # Point this to your external Ollama (Easypanel) host. Example:
       # - LLM_API_URL=https://basheer-ollama.x0uyzh.easypanel.host/v1/chat/completions
       - LLM_API_URL=

@@ -173,7 +173,7 @@ def download_video(url: str, output_path: Path):
 
 
 def transcribe_video(video_path: Path, transcript_path: Path, language: str, model_size: str):
-    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8_float16")
+    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
     device = os.getenv("WHISPER_DEVICE", "cpu")
     model = WhisperModel(model_size, device=device, compute_type=compute_type)
     segments, _ = model.transcribe(str(video_path), language=language)

@@ -78,8 +78,32 @@
       <div class="max-w-3xl mx-auto">
     <!-- Job Input Area -->
         <div class="mb-12">
-          <h2 class="text-2xl font-bold mb-4">Upload Audio File</h2>
-          <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus" class="w-full mb-4 px-4 py-2 border border-gray-200 rounded text-sm cursor-pointer" />
+          <h2 class="text-2xl font-bold mb-4">Upload Media File</h2>
+          <div class="mb-4 grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Language</label>
+              <select id="language-select" class="w-full px-4 py-2 border border-gray-200 rounded text-sm bg-white cursor-pointer">
+                <option value="ar">Arabic</option>
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="zh">Chinese</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="hi">Hindi</option>
+                <option value="tr">Turkish</option>
+                <option value="pl">Polish</option>
+                <option value="vi">Vietnamese</option>
+                <option value="th">Thai</option>
+              </select>
+            </div>
+          </div>
+          <input type="file" id="audio-file" accept=".mp3,.m4a,.wav,.aac,.flac,.opus,.mp4,.mov,.mkv,.webm,.avi,.flv,.wmv,.m3u8" class="w-full mb-4 px-4 py-2 border border-gray-200 rounded text-sm cursor-pointer" placeholder="Select audio or video file..." />
+          <p class="text-xs text-gray-500 mb-4">Supports: MP3, M4A, WAV, AAC, FLAC, OPUS, MP4, MOV, MKV, WEBM, AVI, FLV, WMV</p>
           <div class="flex items-center gap-3">
              <button id="start-job" class="px-4 py-1.5 bg-black text-white rounded-full text-sm font-medium hover:bg-zinc-800 transition">Transcribe</button>
              <span id="job-status" class="text-sm text-gray-400 italic"></span>
@@ -189,6 +213,7 @@
     const elements = {
       editor: document.getElementById('editor'),
       audioFile: document.getElementById('audio-file'),
+      languageSelect: document.getElementById('language-select'),
       startJob: document.getElementById('start-job'),
       jobStatus: document.getElementById('job-status'),
       errorDisplay: document.getElementById('error-display'),
@@ -308,7 +333,7 @@
     async function startJob() {
       const file = elements.audioFile.files[0];
       if (!file) {
-        alert('Please select an audio file');
+        alert('Please select an audio or video file');
         return;
       }
       
@@ -319,7 +344,7 @@
       try {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('language', 'ar');
+        formData.append('language', elements.languageSelect.value);
         
         const res = await fetch(api('/upload_audio'), {
           method: 'POST',

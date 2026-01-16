@@ -1,0 +1,34 @@
+version: "3.9"
+services:
+  app:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - ./frontend:/app/frontend
+    environment:
+      - DATA_DIR=/data
+      - STATIC_DIR=/app/frontend
+      - WHISPER_MODEL=large-v3
+      - WHISPER_DEVICE=cpu
+      - WHISPER_COMPUTE_TYPE=int8_float16
+      # Point this to your external Ollama (Easypanel) host. Example:
+      # - LLM_API_URL=https://basheer-ollama.x0uyzh.easypanel.host/v1/chat/completions
+      - LLM_API_URL=
+      # Set to a small model name you already have on Ollama (leave empty to require specification per-chat)
+      - LLM_MODEL=
+
+# If you want the stack to run a local Ollama and pull models automatically,
+# uncomment the 'ollama' service below (BEWARE: pulling big models may consume disk and bandwidth).
+#  ollama:
+#    image: ollama/ollama:latest
+#    ports:
+#      - "11434:11434"
+#    volumes:
+#      - ollama:/root/.ollama
+#    restart: unless-stopped
+#    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull qwen2.5:7b-instruct && tail -f /dev/null"]
+
+volumes:
+  ollama:

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arabic Book Maker</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --accent: #10b981;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+    }
+    body { margin: 0; background: var(--bg); color: var(--text); display: grid; place-items: center; }
+    .layout { width: min(1100px, 94vw); padding: 32px 0 60px; display: grid; gap: 16px; }
+    .hero { display: grid; gap: 8px; }
+    .hero h1 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
+    .card { background: var(--card); border: 1px solid #1f2937; border-radius: 16px; padding: 18px; }
+    form { display: grid; gap: 12px; }
+    input, button, textarea { border-radius: 10px; border: 1px solid #1f2937; background: #0b1220; color: var(--text); font-size: 16px; }
+    input, textarea { padding: 12px; }
+    button { cursor: pointer; padding: 12px 16px; border: none; background: var(--accent); color: #03170f; font-weight: 700; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .status { color: var(--muted); font-size: 14px; }
+    .chat { min-height: 320px; max-height: 420px; overflow: auto; display: grid; gap: 10px; background: #0b1220; border-radius: 12px; padding: 14px; border: 1px solid #1f2937; }
+    .bubble { padding: 10px 12px; border-radius: 12px; line-height: 1.5; }
+    .user { background: #172554; }
+    .assistant { background: #0f172a; border: 1px solid #1f2937; }
+    .transcript { white-space: pre-wrap; max-height: 200px; overflow: auto; border: 1px solid #1f2937; padding: 10px; border-radius: 10px; background: #0b1220; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="hero">
+      <h1>Arabic Episode → Book</h1>
+      <p class="status">Paste a YouTube link, wait for transcription, then chat to craft the book.</p>
+    </div>
+
+    <div class="card">
+      <form id="job-form">
+        <label> YouTube URL
+          <input id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required />
+        </label>
+        <button id="submit" type="submit">Start</button>
+        <div class="status" id="job-status"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="status" id="transcript-status">Transcript will appear here after processing.</div>
+      <div class="transcript" id="transcript"></div>
+    </div>
+
+    <div class="card">
+      <div class="chat" id="chat"></div>
+      <form id="chat-form" style="display:grid; gap:8px; margin-top:8px;">
+        <textarea id="chat-input" rows="3" placeholder="Ask for a chapter outline or rewrite a section..." required></textarea>
+        <button id="chat-send" type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+
+<script>
+const api = (path) => `${window.location.origin}/api${path}`;
+let currentJob = null;
+let poller = null;
+const statusEl = document.getElementById('job-status');
+const transcriptEl = document.getElementById('transcript');
+const transcriptStatusEl = document.getElementById('transcript-status');
+const chatEl = document.getElementById('chat');
+
+function addBubble(sender, text) {
+  const div = document.createElement('div');
+  div.className = `bubble ${sender}`;
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+async function createJob(url) {
+  const res = await fetch(api('/jobs'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function fetchJob(jobId) {
+  const res = await fetch(api(`/jobs/${jobId}`));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function fetchTranscript(jobId) {
+  const res = await fetch(api(`/jobs/${jobId}/transcript`));
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function sendChat(jobId, message) {
+  const res = await fetch(api('/chat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId, message }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function startPolling(jobId) {
+  poller = setInterval(async () => {
+    try {
+      const job = await fetchJob(jobId);
+      statusEl.textContent = `Status: ${job.status}`;
+      if (job.status === 'done') {
+        clearInterval(poller);
+        const t = await fetchTranscript(jobId);
+        transcriptStatusEl.textContent = 'Transcript ready';
+        transcriptEl.textContent = t.transcript;
+      }
+      if (job.status === 'failed') {
+        clearInterval(poller);
+        transcriptStatusEl.textContent = 'Failed';
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, 4000);
+}
+
+document.getElementById('job-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = document.getElementById('url').value.trim();
+  statusEl.textContent = 'Submitting...';
+  transcriptEl.textContent = '';
+  transcriptStatusEl.textContent = 'Working on it...';
+  try {
+    const { job_id } = await createJob(url);
+    currentJob = job_id;
+    statusEl.textContent = `Job ${job_id} created`;
+    if (poller) clearInterval(poller);
+    startPolling(job_id);
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+});
+
+document.getElementById('chat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!currentJob) {
+    alert('Start a job first');
+    return;
+  }
+  const msg = document.getElementById('chat-input').value.trim();
+  if (!msg) return;
+  addBubble('user', msg);
+  document.getElementById('chat-input').value = '';
+  try {
+    const { reply } = await sendChat(currentJob, msg);
+    addBubble('assistant', reply);
+  } catch (err) {
+    addBubble('assistant', 'Error: ' + err.message);
+  }
+});
+</script>
+</body>
+</html>

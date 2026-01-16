@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+venv/
+.venv/
+
+# Data and local
+data/
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Node
+node_modules/
+
+# Docker
+**/ollama/

@@ -8,18 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system deps including Chrome for yt-dlp cookie extraction
+# Install system deps (Chrome & Node no longer needed - using file upload not YouTube)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    curl \
-    wget \
-    gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy backend and frontend
@@ -28,8 +19,7 @@ COPY frontend/ /app/frontend/
 COPY backend/requirements.txt /app/requirements.txt
 
 # Install python deps
-RUN pip install --no-cache-dir -r /app/requirements.txt && \
-    pip install --no-cache-dir --upgrade yt-dlp
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Expose port and run
 EXPOSE 8000
